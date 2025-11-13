@@ -12,8 +12,10 @@ import {
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useCANStore } from "@/store/canStore";
-import { RefreshCw, Plug, Unplug } from "lucide-react";
+import { RefreshCw, Plug, Unplug, Usb, Activity } from "lucide-react";
 
 interface SerialPort {
   name: string;
@@ -115,15 +117,30 @@ export function SerialPortSelector() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Serial Port Connection</CardTitle>
-        <CardDescription>
-          Select and connect to a serial port for CAN communication
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Usb className="w-5 h-5" />
+              Serial Port Connection
+            </CardTitle>
+            <CardDescription>
+              Select and connect to a serial port for CAN communication
+            </CardDescription>
+          </div>
+          {isConnected && (
+            <Badge variant="success" className="animate-pulse">
+              <Activity className="w-3 h-3 mr-1" />
+              Connected
+            </Badge>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-4">
-          <div className="flex-1 space-y-2">
-            <Label htmlFor="port-select">Serial Port</Label>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="port-select" className="text-sm font-medium">
+              Serial Port
+            </Label>
             <Select
               id="port-select"
               value={selectedPort || ""}
@@ -137,18 +154,22 @@ export function SerialPortSelector() {
                 </option>
               ))}
             </Select>
+            <p className="text-xs text-muted-foreground">
+              {availablePorts.length} port{availablePorts.length !== 1 ? "s" : ""} available
+            </p>
           </div>
-          <div className="w-40 space-y-2">
-            <Label htmlFor="baud-rate">Baud Rate</Label>
+          <div className="space-y-2">
+            <Label htmlFor="baud-rate" className="text-sm font-medium">
+              Baud Rate
+            </Label>
             <div className="relative">
-              <input
+              <Input
                 id="baud-rate"
                 type="text"
                 list="baud-rate-options"
                 value={baudRate}
                 onChange={(e) => setBaudRate(e.target.value)}
                 disabled={isConnected}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Enter baud rate"
               />
               <datalist id="baud-rate-options">
@@ -157,8 +178,13 @@ export function SerialPortSelector() {
                 ))}
               </datalist>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Standard CAN baud rates available
+            </p>
           </div>
         </div>
+
+        <Separator />
 
         <div className="flex gap-2">
           <Button
@@ -194,14 +220,23 @@ export function SerialPortSelector() {
         </div>
 
         {connectionError && (
-          <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-            {connectionError}
+          <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
+            <div className="w-2 h-2 bg-destructive rounded-full"></div>
+            <p className="text-sm text-destructive">{connectionError}</p>
           </div>
         )}
 
-        {isConnected && (
-          <div className="text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/50 p-3 rounded-md border border-green-200 dark:border-green-900">
-            Connected to {selectedPort}
+        {isConnected && selectedPort && (
+          <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                Connected to {selectedPort}
+              </p>
+              <p className="text-xs text-green-600 dark:text-green-400">
+                {baudRate} baud
+              </p>
+            </div>
           </div>
         )}
       </CardContent>

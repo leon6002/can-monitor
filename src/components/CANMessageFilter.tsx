@@ -11,8 +11,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useCANStore } from "@/store/canStore";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Filter, List, Ban, Shield } from "lucide-react";
 
 export function CANMessageFilter() {
   const {
@@ -54,17 +57,49 @@ export function CANMessageFilter() {
     }
   };
 
+  const getFilterModeIcon = (mode: string) => {
+  switch (mode) {
+    case "whitelist":
+      return <List className="w-4 h-4" />;
+    case "blacklist":
+      return <Ban className="w-4 h-4" />;
+    default:
+      return <Filter className="w-4 h-4" />;
+  }
+};
+
+const getFilterModeBadge = (mode: string) => {
+  switch (mode) {
+    case "whitelist":
+      return <Badge variant="success" className="text-xs">Whitelist</Badge>;
+    case "blacklist":
+      return <Badge variant="destructive" className="text-xs">Blacklist</Badge>;
+    default:
+      return <Badge variant="secondary" className="text-xs">Disabled</Badge>;
+  }
+};
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Message Filtering</CardTitle>
-        <CardDescription>
-          Filter CAN messages by ID using whitelist or blacklist mode
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Message Filtering
+            </CardTitle>
+            <CardDescription>
+              Filter CAN messages by ID using whitelist or blacklist mode
+            </CardDescription>
+          </div>
+          {getFilterModeBadge(filterMode)}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="filter-mode">Filter Mode</Label>
+          <Label htmlFor="filter-mode" className="text-sm font-medium">
+            Filter Mode
+          </Label>
           <Select
             id="filter-mode"
             value={filterMode}
@@ -74,92 +109,127 @@ export function CANMessageFilter() {
               )
             }
           >
-            <option value="none">None (Show All)</option>
-            <option value="whitelist">Whitelist (Show Only Listed)</option>
-            <option value="blacklist">Blacklist (Hide Listed)</option>
+            <option value="none">Show All Messages</option>
+            <option value="whitelist">Whitelist Mode (Show Only Listed IDs)</option>
+            <option value="blacklist">Blacklist Mode (Hide Listed IDs)</option>
           </Select>
         </div>
 
         {filterMode !== "none" && (
           <>
-            <div className="space-y-2">
-              <Label htmlFor="new-filter">Add CAN ID Filter (Hex)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="new-filter"
-                  placeholder="Enter CAN ID (e.g., 123)"
-                  value={newFilterId}
-                  onChange={(e) => setNewFilterId(e.target.value.toUpperCase())}
-                  onKeyPress={handleKeyPress}
-                />
-                <Button onClick={handleAddFilter} size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
-                </Button>
+            <Separator />
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-filter" className="text-sm font-medium flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add CAN ID Filter
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="new-filter"
+                    placeholder="Enter CAN ID (e.g., 123)"
+                    value={newFilterId}
+                    onChange={(e) => setNewFilterId(e.target.value.toUpperCase())}
+                    onKeyPress={handleKeyPress}
+                    className="font-mono"
+                  />
+                  <Button onClick={handleAddFilter} size="sm" className="px-4">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter hexadecimal CAN ID to filter messages
+                </p>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Active Filters ({filterRules.length})</Label>
-              {filterRules.length === 0 ? (
-                <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-3 rounded-md border border-gray-200 dark:border-gray-700">
-                  No filters configured. Add CAN IDs to filter messages.
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Active Filters
+                  </Label>
+                  <Badge variant="outline" className="text-xs">
+                    {filterRules.filter(r => r.enabled).length} enabled
+                  </Badge>
                 </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md p-2 bg-gray-50 dark:bg-gray-900/50">
-                  {filterRules.map((rule) => (
-                    <div
-                      key={rule.id}
-                      className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-800 rounded-md"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={rule.enabled}
-                        onChange={() => toggleFilterRule(rule.id)}
-                        className="w-4 h-4"
-                      />
-                      <Input
-                        value={rule.mask}
-                        onChange={(e) =>
-                          updateFilterRule(
-                            rule.id,
-                            e.target.value.toUpperCase()
-                          )
-                        }
-                        className="flex-1 h-8 text-sm font-mono"
-                      />
-                      <Button
-                        onClick={() => removeFilterRule(rule.id)}
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
+
+                {filterRules.length === 0 ? (
+                  <div className="flex items-center justify-center gap-2 p-6 rounded-md border border-dashed bg-muted/20">
+                    <Filter className="w-5 h-5 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      No filters configured. Add CAN IDs to filter messages.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-2 bg-background">
+                    {filterRules.map((rule) => (
+                      <div
+                        key={rule.id}
+                        className="flex items-center gap-3 p-3 rounded-md bg-card border hover:bg-accent/50 transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                        <Switch
+                          checked={rule.enabled}
+                          onCheckedChange={() => toggleFilterRule(rule.id)}
+                        />
+                        <div className="flex-1">
+                          <Input
+                            value={rule.mask}
+                            onChange={(e) =>
+                              updateFilterRule(
+                                rule.id,
+                                e.target.value.toUpperCase()
+                              )
+                            }
+                            className="font-mono text-sm h-8"
+                            disabled={!rule.enabled}
+                          />
+                        </div>
+                        <Button
+                          onClick={() => removeFilterRule(rule.id)}
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/50 p-3 rounded-md border border-gray-200 dark:border-gray-700">
-              <p className="font-semibold mb-1 text-gray-900 dark:text-gray-100">
-                Filter Modes:
-              </p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>
-                  <strong className="text-gray-900 dark:text-gray-100">
-                    Whitelist:
-                  </strong>{" "}
-                  Only show messages with IDs that match the filter list
-                </li>
-                <li>
-                  <strong className="text-gray-900 dark:text-gray-100">
-                    Blacklist:
-                  </strong>{" "}
-                  Hide messages with IDs that match the filter list
-                </li>
-              </ul>
+              <Separator />
+
+              <div className="p-4 rounded-md bg-muted/30 border space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  {getFilterModeIcon(filterMode)}
+                  Filter Mode Information
+                </div>
+                <div className="space-y-2 text-sm">
+                  {filterMode === "whitelist" ? (
+                    <div className="flex items-start gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                      <div>
+                        <p className="font-medium text-green-700 dark:text-green-300">Whitelist Mode</p>
+                        <p className="text-muted-foreground">
+                          Only show messages with IDs that match the filter list. All other messages will be hidden.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full mt-1.5 flex-shrink-0"></div>
+                      <div>
+                        <p className="font-medium text-red-700 dark:text-red-300">Blacklist Mode</p>
+                        <p className="text-muted-foreground">
+                          Hide messages with IDs that match the filter list. All other messages will be shown.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         )}

@@ -10,8 +10,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useCANStore, CANMessage } from "@/store/canStore";
-import { Trash2, Download, Settings } from "lucide-react";
+import { Trash2, Download, Settings, Activity, FileText, CheckCircle, AlertCircle } from "lucide-react";
 
 export function CANMessageLog() {
   const {
@@ -131,28 +134,47 @@ export function CANMessageLog() {
     <Card className="flex flex-col h-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>CAN Message Log</CardTitle>
-            <CardDescription>
-              {filteredMessages.length} message
-              {filteredMessages.length !== 1 ? "s" : ""}
-              {messages.length !== filteredMessages.length &&
-                ` (${messages.length - filteredMessages.length} filtered)`}
-            </CardDescription>
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5" />
+                CAN Message Log
+              </CardTitle>
+              <div className="flex items-center gap-3 mt-1">
+                <CardDescription className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {filteredMessages.length} message{filteredMessages.length !== 1 ? "s" : ""}
+                  </Badge>
+                  {messages.length !== filteredMessages.length && (
+                    <Badge variant="secondary" className="text-xs">
+                      {messages.length - filteredMessages.length} filtered
+                    </Badge>
+                  )}
+                </CardDescription>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-700 dark:text-gray-300">
-              <input
-                type="checkbox"
+
+          <div className="flex items-center gap-2">
+            {/* Auto-scroll toggle */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 border">
+              <Switch
                 checked={autoScroll}
-                onChange={(e) => setAutoScroll(e.target.checked)}
-                className="w-4 h-4"
+                onCheckedChange={setAutoScroll}
+                id="auto-scroll"
               />
-              Auto-scroll
-            </label>
+              <Label htmlFor="auto-scroll" className="text-sm font-medium cursor-pointer">
+                Auto-scroll
+              </Label>
+            </div>
+
+            <Separator orientation="vertical" className="h-6" />
+
+            {/* Action buttons */}
             <Button
               onClick={() => setShowSettings(!showSettings)}
-              variant="outline"
+              variant={showSettings ? "default" : "outline"}
               size="sm"
             >
               <Settings className="w-4 h-4 mr-2" />
@@ -181,70 +203,99 @@ export function CANMessageLog() {
 
         {/* Settings Panel */}
         {showSettings && (
-          <div className="mt-4 p-4 border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-800/50">
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <Label
-                  htmlFor="max-messages"
-                  className="text-gray-700 dark:text-gray-300"
-                >
+          <div className="mt-4 p-4 rounded-md bg-muted/30 border space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">
+                Message Display Settings
+              </Label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="max-messages" className="text-sm">
                   Max Messages to Display
                 </Label>
                 <input
                   id="max-messages"
                   type="number"
                   min="1"
+                  max="10000"
                   value={tempMaxMessages}
                   onChange={(e) => setTempMaxMessages(e.target.value)}
-                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 text-gray-900 dark:text-gray-100"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
-              <Button onClick={handleApplyMaxMessages} size="sm">
-                Apply
-              </Button>
+              <div className="flex items-end gap-2">
+                <Button onClick={handleApplyMaxMessages} size="sm" className="w-full">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Apply Setting
+                </Button>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-              Current: {maxMessages} messages (Total received: {messages.length}
-              )
-            </p>
+            <div className="flex items-center justify-between text-xs text-muted-foreground bg-background p-3 rounded-md border">
+              <span>Current limit: {maxMessages} messages</span>
+              <span>Total received: {messages.length} messages</span>
+            </div>
           </div>
         )}
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto border rounded-md bg-gray-50 dark:bg-gray-900/50">
+        <div className="h-full overflow-hidden">
           {filteredMessages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              No messages received yet
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/10 rounded-md border-2 border-dashed border-muted/30">
+              <FileText className="w-12 h-12 mb-3 text-muted-foreground/50" />
+              <div className="text-center">
+                <p className="font-medium">No messages received yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Connect to a serial port to start monitoring CAN traffic
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="font-mono text-xs">
-              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 font-semibold p-2 grid grid-cols-12 gap-2 text-gray-900 dark:text-gray-100">
-                <div className="col-span-3">Timestamp</div>
-                <div className="col-span-2">ID</div>
-                <div className="col-span-1">Type</div>
-                <div className="col-span-1">DLC</div>
-                <div className="col-span-5">Data</div>
-              </div>
-              {filteredMessages.map((message, index) => (
-                <div
-                  key={index}
-                  className="p-2 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 grid grid-cols-12 gap-2 cursor-pointer text-gray-900 dark:text-gray-100"
-                  onClick={() => setSelectedMessage(message)}
-                >
-                  <div className="col-span-3 text-gray-600 dark:text-gray-400">
-                    {formatTimestamp(message.timestamp)}
-                  </div>
-                  <div className="col-span-2 font-semibold">{message.id}</div>
-                  <div className="col-span-1">
-                    {message.isExtended ? "EXT" : "STD"}
-                  </div>
-                  <div className="col-span-1">
-                    {message.data.replace(/\s/g, "").length / 2}
-                  </div>
-                  <div className="col-span-5">{formatData(message.data)}</div>
+            <div className="h-full flex flex-col bg-background rounded-md border">
+              {/* Table Header */}
+              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-sm border-b font-mono text-xs">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-muted-foreground">
+                  <div className="col-span-3 font-medium">Timestamp</div>
+                  <div className="col-span-2 font-medium">ID</div>
+                  <div className="col-span-1 font-medium">Type</div>
+                  <div className="col-span-1 font-medium">DLC</div>
+                  <div className="col-span-5 font-medium">Data</div>
                 </div>
-              ))}
-              <div ref={logEndRef} />
+              </div>
+
+              {/* Table Body */}
+              <div className="flex-1 overflow-y-auto font-mono text-xs">
+                {filteredMessages.map((message, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors group"
+                    onClick={() => setSelectedMessage(message)}
+                  >
+                    <div className="col-span-3 text-muted-foreground font-mono">
+                      {formatTimestamp(message.timestamp)}
+                    </div>
+                    <div className="col-span-2 font-semibold text-foreground group-hover:text-primary transition-colors">
+                      {message.id}
+                    </div>
+                    <div className="col-span-1">
+                      <Badge
+                        variant={message.isExtended ? "default" : "secondary"}
+                        className="text-[10px] h-5 px-1.5"
+                      >
+                        {message.isExtended ? "EXT" : "STD"}
+                      </Badge>
+                    </div>
+                    <div className="col-span-1 text-muted-foreground">
+                      {message.data.replace(/\s/g, "").length / 2}
+                    </div>
+                    <div className="col-span-5 text-foreground font-mono tracking-wide">
+                      {formatData(message.data)}
+                    </div>
+                  </div>
+                ))}
+                <div ref={logEndRef} />
+              </div>
             </div>
           )}
         </div>
@@ -253,102 +304,116 @@ export function CANMessageLog() {
       {/* Message Detail Modal */}
       {selectedMessage && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={() => setSelectedMessage(null)}
         >
           <div
-            className="bg-white dark:bg-gray-900 border rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-xl text-gray-900 dark:text-gray-100"
+            className="bg-background border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Message Details</h3>
+            {/* Modal Header - Fixed */}
+            <div className="flex items-center justify-between p-6 border-b border-border bg-card">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                <h3 className="text-lg font-semibold">CAN Message Details</h3>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setSelectedMessage(null)}
+                className="h-8 w-8 p-0 hover:bg-destructive/20 hover:text-destructive"
               >
                 ✕
               </Button>
             </div>
 
-            <div className="space-y-4 font-mono text-sm">
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Timestamp
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                  {formatTimestamp(selectedMessage.timestamp)}
-                </div>
-              </div>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-80px)]">
+              <div className="space-y-6">
+                {/* Message Overview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      CAN ID
+                    </Label>
+                    <div className="p-3 bg-muted/30 rounded-md border">
+                      <p className="font-mono text-lg font-semibold text-primary">
+                        0x{selectedMessage.id}
+                      </p>
+                    </div>
+                  </div>
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  CAN ID
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                  {selectedMessage.id}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Frame Type</Label>
+                    <div className="p-3 bg-muted/30 rounded-md border">
+                      <Badge
+                        variant={selectedMessage.isExtended ? "default" : "secondary"}
+                        className="text-sm"
+                      >
+                        {selectedMessage.isExtended ? "Extended (29-bit)" : "Standard (11-bit)"}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Frame Type
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                  {selectedMessage.isExtended
-                    ? "Extended (29-bit)"
-                    : "Standard (11-bit)"}
-                </div>
-              </div>
+                <Separator />
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Data Length (DLC)
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded">
-                  {selectedMessage.data.replace(/\s/g, "").length / 2} bytes
-                </div>
-              </div>
+                {/* Message Data */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Timestamp</Label>
+                    <div className="p-3 bg-muted/30 rounded-md border font-mono text-sm">
+                      {formatTimestamp(selectedMessage.timestamp)}
+                    </div>
+                  </div>
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Data (Formatted)
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded break-all">
-                  {formatData(selectedMessage.data)}
-                </div>
-              </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Data Length (DLC)</Label>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="font-mono">
+                        {selectedMessage.data.replace(/\s/g, "").length / 2} bytes
+                      </Badge>
+                    </div>
+                  </div>
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Raw Bytes (Hex)
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded break-all">
-                  {selectedMessage.rawBytes || "N/A"}
-                </div>
-              </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Data (Formatted)</Label>
+                    <div className="p-3 bg-muted/30 rounded-md border font-mono text-sm tracking-wide break-all">
+                      {formatData(selectedMessage.data)}
+                    </div>
+                  </div>
 
-              <div>
-                <Label className="text-gray-600 dark:text-gray-400">
-                  Raw Bytes (Decimal)
-                </Label>
-                <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-800 rounded break-all text-xs">
-                  {(() => {
-                    if (!selectedMessage.rawBytes) return "N/A";
-                    try {
-                      const bytes = selectedMessage.rawBytes
-                        .split(" ")
-                        .filter((byte) => byte.trim().length > 0)
-                        .map((byte) => {
-                          const num = parseInt(byte.trim(), 16);
-                          return isNaN(num) ? null : num;
-                        })
-                        .filter((num) => num !== null);
-                      return bytes.length > 0 ? bytes.join(", ") : "N/A";
-                    } catch (e) {
-                      return "Parse Error";
-                    }
-                  })()}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Raw Hex</Label>
+                      <div className="p-3 bg-muted/30 rounded-md border font-mono text-xs break-all">
+                        {selectedMessage.rawBytes || "N/A"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Raw Decimal</Label>
+                      <div className="p-3 bg-muted/30 rounded-md border font-mono text-xs break-all">
+                        {(() => {
+                          if (!selectedMessage.rawBytes) return "N/A";
+                          try {
+                            const bytes = selectedMessage.rawBytes
+                              .split(" ")
+                              .filter((byte) => byte.trim().length > 0)
+                              .map((byte) => {
+                                const num = parseInt(byte.trim(), 16);
+                                return isNaN(num) ? null : num;
+                              })
+                              .filter((num) => num !== null);
+                            return bytes.length > 0 ? bytes.join(", ") : "N/A";
+                          } catch (e) {
+                            return "Parse Error";
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
