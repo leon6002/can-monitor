@@ -2,7 +2,6 @@ import { Toaster } from "sonner";
 import { SerialPortSelector } from "./components/SerialPortSelector";
 import { CANMessageSender } from "./components/CANMessageSender";
 import { CANMessageLog } from "./components/CANMessageLog";
-import { CANMessageFilter } from "./components/CANMessageFilter";
 import { ThemeToggle } from "./components/ThemeToggle";
 
 function App() {
@@ -36,7 +35,6 @@ function App() {
                 <div className="space-y-6 overflow-y-auto">
                   <SerialPortSelector />
                   <CANMessageSender />
-                  <CANMessageFilter />
                 </div>
                 <div className="lg:col-span-2">
                   <CANMessageLog />

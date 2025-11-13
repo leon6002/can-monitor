@@ -112,67 +112,49 @@ export function CANMessageSender() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Radio className="w-5 h-5" />
-              Send CAN Message
-            </CardTitle>
-            <CardDescription>
-              Transmit CAN messages through the connected serial port
-            </CardDescription>
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4" />
+            <CardTitle className="text-sm">Send Message</CardTitle>
+            {isConnected && (
+              <Badge variant="default" className="text-xs h-5">
+                <Cpu className="w-2 h-2 mr-1" />
+                Ready
+              </Badge>
+            )}
           </div>
-          {isConnected && (
-            <Badge variant="default">
-              <Cpu className="w-3 h-3 mr-1" />
-              Ready
-            </Badge>
-          )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* CAN ID Input Section */}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="can-id" className="text-sm font-medium flex items-center gap-2">
-              <Hash className="w-4 h-4" />
-              CAN ID (Hexadecimal)
-            </Label>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Input
-                  id="can-id"
-                  placeholder={isExtended ? "00000000" : "000"}
-                  value={canId}
-                  onChange={(e) => setCanId(e.target.value.toUpperCase())}
-                  onKeyPress={handleKeyPress}
-                  disabled={!isConnected}
-                  maxLength={isExtended ? 8 : 3}
-                  className="font-mono"
-                />
-              </div>
-              <div className="flex items-center space-x-2 bg-muted px-3 py-2 rounded-md">
-                <Badge variant={isExtended ? "default" : "secondary"} className="text-xs">
-                  {isExtended ? "29-bit" : "11-bit"}
-                </Badge>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {isExtended ? "Extended CAN ID (0x00000000 - 0x1FFFFFFF)" : "Standard CAN ID (0x000 - 0x7FF)"}
-            </p>
-          </div>
-
-          {/* Extended ID Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-md bg-muted/30 border">
-            <div className="space-y-1">
-              <Label htmlFor="extended-toggle" className="text-sm font-medium">
-                Extended Frame Format
+      <CardContent className="space-y-3 pt-0">
+        {/* CAN ID and Extended Toggle Row */}
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="can-id" className="text-xs font-medium">
+                ID
               </Label>
-              <p className="text-xs text-muted-foreground">
-                Use 29-bit identifier instead of 11-bit
-              </p>
+              <Input
+                id="can-id"
+                placeholder={isExtended ? "00000000" : "000"}
+                value={canId}
+                onChange={(e) => setCanId(e.target.value.toUpperCase())}
+                onKeyPress={handleKeyPress}
+                disabled={!isConnected}
+                maxLength={isExtended ? 8 : 3}
+                className="font-mono h-8 text-xs"
+              />
             </div>
+            <div className="flex items-end">
+              <Badge variant={isExtended ? "default" : "secondary"} className="text-xs h-6">
+                {isExtended ? "29-bit" : "11-bit"}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-2 rounded-md bg-muted/30">
+            <Label htmlFor="extended-toggle" className="text-xs">
+              Extended Frame
+            </Label>
             <Switch
               id="extended-toggle"
               checked={isExtended}
@@ -185,12 +167,10 @@ export function CANMessageSender() {
           </div>
         </div>
 
-        <Separator />
-
-        {/* Data Input Section */}
-        <div className="space-y-2">
-          <Label htmlFor="can-data" className="text-sm font-medium">
-            CAN Data (Hexadecimal)
+        {/* Data Input */}
+        <div className="space-y-1">
+          <Label htmlFor="can-data" className="text-xs font-medium">
+            Data
           </Label>
           <Input
             id="can-data"
@@ -199,11 +179,11 @@ export function CANMessageSender() {
             onChange={(e) => setCanData(e.target.value.toUpperCase())}
             onKeyPress={handleKeyPress}
             disabled={!isConnected}
-            className="font-mono"
+            className="font-mono h-8 text-xs"
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Enter hex bytes separated by spaces</span>
-            <span>Max 8 bytes ({canData.replace(/\s/g, "").length / 2}/8)</span>
+            <span>Max 8 bytes</span>
+            <span>{canData.replace(/\s/g, "").length / 2}/8</span>
           </div>
         </div>
 
@@ -211,40 +191,36 @@ export function CANMessageSender() {
         <Button
           onClick={handleSend}
           disabled={!isConnected || isSending}
-          className="w-full h-11"
-          size="lg"
+          className="w-full h-7 text-xs"
         >
-          <Send className={`w-4 h-4 mr-2 ${isSending ? "animate-pulse" : ""}`} />
-          {isSending ? "Sending..." : "Send Message"}
+          <Send className={`w-3 h-3 mr-1 ${isSending ? "animate-pulse" : ""}`} />
+          {isSending ? "Sending..." : "Send"}
         </Button>
 
         {/* Status Messages */}
         {error && (
-          <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            <div className="w-2 h-2 bg-destructive rounded-full"></div>
-            <p className="text-sm text-destructive">{error}</p>
+          <div className="flex items-center gap-1 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+            <div className="w-1.5 h-1.5 bg-destructive rounded-full"></div>
+            <p className="text-xs text-destructive">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="flex items-center gap-1 p-2 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
             <div>
-              <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                Message sent successfully!
-              </p>
-              <p className="text-xs text-green-600 dark:text-green-400">
-                ID: {canId} ({isExtended ? "EXT" : "STD"})
+              <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                Sent: {canId} ({isExtended ? "EXT" : "STD"})
               </p>
             </div>
           </div>
         )}
 
         {!isConnected && (
-          <div className="flex items-center gap-2 p-3 rounded-md bg-muted/30 border">
-            <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
-            <p className="text-sm text-muted-foreground">
-              Connect to a serial port to send messages
+          <div className="flex items-center gap-1 p-2 rounded-md bg-muted/30 border">
+            <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full"></div>
+            <p className="text-xs text-muted-foreground">
+              Connect to send messages
             </p>
           </div>
         )}

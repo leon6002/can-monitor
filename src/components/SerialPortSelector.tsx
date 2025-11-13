@@ -9,11 +9,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useCANStore } from "@/store/canStore";
 import { RefreshCw, Plug, Unplug, Usb, Activity } from "lucide-react";
 
@@ -116,122 +120,114 @@ export function SerialPortSelector() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Usb className="w-5 h-5" />
-              Serial Port Connection
-            </CardTitle>
-            <CardDescription>
-              Select and connect to a serial port for CAN communication
-            </CardDescription>
+          <div className="flex items-center gap-2">
+            <Usb className="w-4 h-4" />
+            <CardTitle className="text-sm">Serial Port</CardTitle>
+            {isConnected && (
+              <Badge variant="success" className="text-xs h-5 animate-pulse">
+                <Activity className="w-2 h-2 mr-1" />
+                Connected
+              </Badge>
+            )}
           </div>
-          {isConnected && (
-            <Badge variant="success" className="animate-pulse">
-              <Activity className="w-3 h-3 mr-1" />
-              Connected
-            </Badge>
-          )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="port-select" className="text-sm font-medium">
-              Serial Port
+      <CardContent className="space-y-3 pt-0">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label htmlFor="port-select" className="text-xs font-medium">
+              Port
             </Label>
             <Select
-              id="port-select"
               value={selectedPort || ""}
-              onChange={(e) => setSelectedPort(e.target.value)}
+              onValueChange={setSelectedPort}
               disabled={isConnected}
             >
-              <option value="">Select a port...</option>
-              {availablePorts.map((port) => (
-                <option key={port.path} value={port.path}>
-                  {port.name}
-                </option>
-              ))}
+              <SelectTrigger>
+                <SelectValue placeholder="Select port..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePorts.map((port) => (
+                  <SelectItem key={port.path} value={port.path}>
+                    {port.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              {availablePorts.length} port{availablePorts.length !== 1 ? "s" : ""} available
-            </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="baud-rate" className="text-sm font-medium">
+          <div className="space-y-1">
+            <Label htmlFor="baud-rate" className="text-xs font-medium">
               Baud Rate
             </Label>
-            <div className="relative">
-              <Input
-                id="baud-rate"
-                type="text"
-                list="baud-rate-options"
-                value={baudRate}
-                onChange={(e) => setBaudRate(e.target.value)}
-                disabled={isConnected}
-                placeholder="Enter baud rate"
-              />
-              <datalist id="baud-rate-options">
+            <Select
+              value={baudRate}
+              onValueChange={setBaudRate}
+              disabled={isConnected}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select baud rate..." />
+              </SelectTrigger>
+              <SelectContent>
                 {commonBaudRates.map((rate) => (
-                  <option key={rate} value={rate} />
+                  <SelectItem key={rate} value={rate}>
+                    {rate}
+                  </SelectItem>
                 ))}
-              </datalist>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Standard CAN baud rates available
-            </p>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <Separator />
-
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <Button
             onClick={refreshPorts}
             disabled={isConnected || isRefreshing}
             variant="outline"
             size="sm"
+            className="h-7 text-xs px-2"
           >
             <RefreshCw
-              className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`}
+              className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
             />
-            Refresh
           </Button>
           {!isConnected ? (
             <Button
               onClick={handleConnect}
               disabled={!selectedPort || isConnecting}
-              className="flex-1"
+              className="flex-1 h-7 text-xs"
             >
-              <Plug className="w-4 h-4 mr-2" />
+              <Plug className="w-3 h-3 mr-1" />
               {isConnecting ? "Connecting..." : "Connect"}
             </Button>
           ) : (
             <Button
               onClick={handleDisconnect}
               variant="destructive"
-              className="flex-1"
+              className="flex-1 h-7 text-xs"
             >
-              <Unplug className="w-4 h-4 mr-2" />
+              <Unplug className="w-3 h-3 mr-1" />
               Disconnect
             </Button>
           )}
         </div>
 
         {connectionError && (
-          <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20">
-            <div className="w-2 h-2 bg-destructive rounded-full"></div>
-            <p className="text-sm text-destructive">{connectionError}</p>
+          <div className="flex items-center gap-1 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+            <div className="w-1.5 h-1.5 bg-destructive rounded-full"></div>
+            <p className="text-xs text-destructive">{connectionError}</p>
           </div>
         )}
 
         {isConnected && selectedPort && (
-          <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                Connected to {selectedPort}
+              <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                {selectedPort.length > 25
+                  ? selectedPort.substring(0, 25) + "..."
+                  : selectedPort}
               </p>
               <p className="text-xs text-green-600 dark:text-green-400">
                 {baudRate} baud

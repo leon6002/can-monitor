@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,30 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCANStore, CANMessage } from "@/store/canStore";
-import { Trash2, Download, Settings, Activity, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  Trash2,
+  Download,
+  Settings,
+  Activity,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Filter,
+  Plus,
+  Shield,
+  List,
+  Ban,
+} from "lucide-react";
 
 export function CANMessageLog() {
   const {
@@ -25,16 +45,21 @@ export function CANMessageLog() {
     filterRules,
     maxMessages,
     setMaxMessages,
+    setFilterMode,
+    addFilterRule,
+    removeFilterRule,
+    toggleFilterRule,
+    updateFilterRule,
   } = useCANStore();
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<CANMessage | null>(
     null
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
   const [tempMaxMessages, setTempMaxMessages] = useState(
     maxMessages.toString()
   );
+  const [newFilterId, setNewFilterId] = useState("");
 
   useEffect(() => {
     const unlisten = listen<CANMessage>("can-message", (event) => {
@@ -45,12 +70,6 @@ export function CANMessageLog() {
       unlisten.then((fn) => fn());
     };
   }, [addMessage]);
-
-  useEffect(() => {
-    if (autoScroll) {
-      logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, autoScroll]);
 
   const shouldDisplayMessage = (message: CANMessage): boolean => {
     if (filterMode === "none") return true;
@@ -77,7 +96,8 @@ export function CANMessageLog() {
     return filterMode === "blacklist";
   };
 
-  const filteredMessages = messages.filter(shouldDisplayMessage);
+  // 反转消息顺序，最新的在最上面
+  const filteredMessages = messages.filter(shouldDisplayMessage).reverse();
 
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp);
@@ -106,6 +126,67 @@ export function CANMessageLog() {
     setMaxMessages(num);
     setShowSettings(false);
     toast.success(`Max messages set to ${num}`);
+  };
+
+  const handleAddFilter = () => {
+    if (!newFilterId) {
+      toast.error("Please enter a CAN ID");
+      return;
+    }
+
+    const idNum = parseInt(newFilterId, 16);
+    if (isNaN(idNum)) {
+      toast.error("Invalid CAN ID (must be hexadecimal)");
+      return;
+    }
+
+    addFilterRule({
+      id: crypto.randomUUID(),
+      mask: newFilterId.toUpperCase(),
+      enabled: true,
+    });
+    toast.success(`Filter added: ${newFilterId.toUpperCase()}`);
+    setNewFilterId("");
+  };
+
+  const handleFilterKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleAddFilter();
+    }
+  };
+
+  const getFilterModeIcon = (mode: string) => {
+    switch (mode) {
+      case "whitelist":
+        return <List className="w-4 h-4" />;
+      case "blacklist":
+        return <Ban className="w-4 h-4" />;
+      default:
+        return <Filter className="w-4 h-4" />;
+    }
+  };
+
+  const getFilterModeBadge = (mode: string) => {
+    switch (mode) {
+      case "whitelist":
+        return (
+          <Badge variant="default" className="text-xs bg-green-600">
+            Whitelist
+          </Badge>
+        );
+      case "blacklist":
+        return (
+          <Badge variant="destructive" className="text-xs">
+            Blacklist
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary" className="text-xs">
+            Disabled
+          </Badge>
+        );
+    }
   };
 
   const exportMessages = () => {
@@ -144,7 +225,8 @@ export function CANMessageLog() {
               <div className="flex items-center gap-3 mt-1">
                 <CardDescription className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
-                    {filteredMessages.length} message{filteredMessages.length !== 1 ? "s" : ""}
+                    {filteredMessages.length} message
+                    {filteredMessages.length !== 1 ? "s" : ""}
                   </Badge>
                   {messages.length !== filteredMessages.length && (
                     <Badge variant="secondary" className="text-xs">
@@ -157,23 +239,24 @@ export function CANMessageLog() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Auto-scroll toggle */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50 border">
-              <Switch
-                checked={autoScroll}
-                onCheckedChange={setAutoScroll}
-                id="auto-scroll"
-              />
-              <Label htmlFor="auto-scroll" className="text-sm font-medium cursor-pointer">
-                Auto-scroll
-              </Label>
-            </div>
-
-            <Separator orientation="vertical" className="h-6" />
-
             {/* Action buttons */}
             <Button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => {
+                setShowFilter(!showFilter);
+                setShowSettings(false);
+              }}
+              variant={showFilter ? "default" : "outline"}
+              size="sm"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Filter
+              {filterMode !== "none" && getFilterModeBadge(filterMode)}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSettings(!showSettings);
+                setShowFilter(false);
+              }}
               variant={showSettings ? "default" : "outline"}
               size="sm"
             >
@@ -201,6 +284,133 @@ export function CANMessageLog() {
           </div>
         </div>
 
+        {/* Filter Panel */}
+        {showFilter && (
+          <div className="mt-4 p-4 rounded-md bg-muted/30 border space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Message Filter</Label>
+                {getFilterModeBadge(filterMode)}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="filter-mode" className="text-xs font-medium">
+                Filter Mode
+              </Label>
+              <Select
+                value={filterMode}
+                onValueChange={(value: "none" | "whitelist" | "blacklist") =>
+                  setFilterMode(value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Show All</SelectItem>
+                  <SelectItem value="whitelist">Whitelist</SelectItem>
+                  <SelectItem value="blacklist">Blacklist</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {filterMode !== "none" && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex gap-1">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="CAN ID (e.g., 123)"
+                        value={newFilterId}
+                        onChange={(e) =>
+                          setNewFilterId(e.target.value.toUpperCase())
+                        }
+                        onKeyDown={handleFilterKeyDown}
+                        className="font-mono h-7 text-xs"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleAddFilter}
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium">
+                      Filters ({filterRules.filter((r) => r.enabled).length})
+                    </Label>
+                  </div>
+
+                  {filterRules.length === 0 ? (
+                    <div className="flex items-center justify-center gap-1 p-3 rounded-md border border-dashed bg-muted/20">
+                      <Filter className="w-3 h-3 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">
+                        No filters
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-32 overflow-y-auto border rounded-md p-1 bg-background">
+                      {filterRules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className="flex items-center gap-1 p-1 rounded-sm hover:bg-accent/50"
+                        >
+                          <Switch
+                            checked={rule.enabled}
+                            onCheckedChange={() => toggleFilterRule(rule.id)}
+                            className="scale-75"
+                          />
+                          <Input
+                            value={rule.mask}
+                            onChange={(e) =>
+                              updateFilterRule(
+                                rule.id,
+                                e.target.value.toUpperCase()
+                              )
+                            }
+                            className="font-mono text-xs h-6 flex-1"
+                            disabled={!rule.enabled}
+                          />
+                          <Button
+                            onClick={() => removeFilterRule(rule.id)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 hover:bg-destructive/20"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-2 rounded-md bg-muted/30 border">
+                  <div className="flex items-center gap-1 text-xs">
+                    {getFilterModeIcon(filterMode)}
+                    {filterMode === "whitelist" ? (
+                      <span className="text-green-700 dark:text-green-300">
+                        Whitelist: Show only listed IDs
+                      </span>
+                    ) : (
+                      <span className="text-red-700 dark:text-red-300">
+                        Blacklist: Hide listed IDs
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Settings Panel */}
         {showSettings && (
           <div className="mt-4 p-4 rounded-md bg-muted/30 border space-y-4">
@@ -226,7 +436,11 @@ export function CANMessageLog() {
                 />
               </div>
               <div className="flex items-end gap-2">
-                <Button onClick={handleApplyMaxMessages} size="sm" className="w-full">
+                <Button
+                  onClick={handleApplyMaxMessages}
+                  size="sm"
+                  className="w-full"
+                >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Apply Setting
                 </Button>
@@ -294,7 +508,6 @@ export function CANMessageLog() {
                     </div>
                   </div>
                 ))}
-                <div ref={logEndRef} />
               </div>
             </div>
           )}
@@ -304,15 +517,15 @@ export function CANMessageLog() {
       {/* Message Detail Modal */}
       {selectedMessage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4  backdrop-blur-sm"
           onClick={() => setSelectedMessage(null)}
         >
           <div
-            className="bg-background border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
+            className="bg-white dark:bg-black border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header - Fixed */}
-            <div className="flex items-center justify-between p-6 border-b border-border bg-card">
+            <div className="flex items-center justify-between p-6 border-b border-border bg-muted/30">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
                 <h3 className="text-lg font-semibold">CAN Message Details</h3>
@@ -328,7 +541,7 @@ export function CANMessageLog() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto max-h-[calc(85vh-80px)]">
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-80px)] bg-card">
               <div className="space-y-6">
                 {/* Message Overview */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -337,7 +550,7 @@ export function CANMessageLog() {
                       <Activity className="w-4 h-4" />
                       CAN ID
                     </Label>
-                    <div className="p-3 bg-muted/30 rounded-md border">
+                    <div className="p-3 bg-muted/50 rounded-md border">
                       <p className="font-mono text-lg font-semibold text-primary">
                         0x{selectedMessage.id}
                       </p>
@@ -346,40 +559,49 @@ export function CANMessageLog() {
 
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Frame Type</Label>
-                    <div className="p-3 bg-muted/30 rounded-md border">
+                    <div className="p-3 bg-muted/50 rounded-md border">
                       <Badge
-                        variant={selectedMessage.isExtended ? "default" : "secondary"}
+                        variant={
+                          selectedMessage.isExtended ? "default" : "secondary"
+                        }
                         className="text-sm"
                       >
-                        {selectedMessage.isExtended ? "Extended (29-bit)" : "Standard (11-bit)"}
+                        {selectedMessage.isExtended
+                          ? "Extended (29-bit)"
+                          : "Standard (11-bit)"}
                       </Badge>
                     </div>
                   </div>
                 </div>
 
-                <Separator />
+                <div className="border-t my-4"></div>
 
                 {/* Message Data */}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Timestamp</Label>
-                    <div className="p-3 bg-muted/30 rounded-md border font-mono text-sm">
+                    <div className="p-3 bg-muted/50 rounded-md border font-mono text-sm">
                       {formatTimestamp(selectedMessage.timestamp)}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Data Length (DLC)</Label>
+                    <Label className="text-sm font-medium">
+                      Data Length (DLC)
+                    </Label>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="font-mono">
-                        {selectedMessage.data.replace(/\s/g, "").length / 2} bytes
+                        {selectedMessage.data.replace(/\s/g, "").length / 2}{" "}
+                        bytes
                       </Badge>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Data (Formatted)</Label>
-                    <div className="p-3 bg-muted/30 rounded-md border font-mono text-sm tracking-wide break-all">
+                    <Label className="text-sm font-medium">
+                      Data (Formatted)
+                    </Label>
+                    <div className="p-3 bg-muted/50 rounded-md border font-mono text-sm tracking-wide break-all">
                       {formatData(selectedMessage.data)}
                     </div>
                   </div>
@@ -387,14 +609,14 @@ export function CANMessageLog() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Raw Hex</Label>
-                      <div className="p-3 bg-muted/30 rounded-md border font-mono text-xs break-all">
+                      <div className="p-3 bg-muted/50 rounded-md border font-mono text-xs break-all">
                         {selectedMessage.rawBytes || "N/A"}
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Raw Decimal</Label>
-                      <div className="p-3 bg-muted/30 rounded-md border font-mono text-xs break-all">
+                      <div className="p-3 bg-muted/50 rounded-md border font-mono text-xs break-all">
                         {(() => {
                           if (!selectedMessage.rawBytes) return "N/A";
                           try {
