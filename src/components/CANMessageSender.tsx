@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCANStore } from "@/store/canStore";
+import { useProjectStore } from "@/store/projectStore";
 import { Send, Plus, Trash2, Square, Radio } from "lucide-react";
 
 interface CANMessageItem {
@@ -20,17 +21,23 @@ interface CANMessageItem {
 
 export function CANMessageSender() {
   const isConnected = useCANStore((state) => state.isConnected);
+  const { currentProject, updateProject } = useProjectStore();
 
-  // 消息列表 - 默认创建一条消息
-  const [messages, setMessages] = useState<CANMessageItem[]>([
-    {
-      id: crypto.randomUUID(),
-      canId: "000",
-      data: "00",
-      isExtended: false,
-      selected: true,
-    },
-  ]);
+  // 消息列表 - 从项目加载或使用默认值
+  const [messages, setMessages] = useState<CANMessageItem[]>(() => {
+    if (currentProject?.messageTemplates) {
+      return currentProject.messageTemplates;
+    }
+    return [
+      {
+        id: crypto.randomUUID(),
+        canId: "000",
+        data: "00",
+        isExtended: false,
+        selected: true,
+      },
+    ];
+  });
 
   // 发送控制
   const [isSending, setIsSending] = useState(false);
@@ -40,6 +47,45 @@ export function CANMessageSender() {
 
   const sendTimerRef = useRef<number | null>(null);
   const currentIndexRef = useRef(0);
+
+  // 从项目加载消息模板
+  useEffect(() => {
+    if (currentProject?.messageTemplates) {
+      setMessages(currentProject.messageTemplates);
+    }
+  }, [currentProject?.id]);
+
+  // 自动保存消息到项目（10秒防抖）
+  useEffect(() => {
+    if (currentProject && currentProject.projectPath) {
+      const saveTimer = setTimeout(() => {
+        console.log("[CANMessageSender] Auto-saving messages to project...");
+
+        const updatedProject = {
+          ...currentProject,
+          messageTemplates: messages,
+          updatedAt: Date.now(),
+        };
+
+        // 先更新 store
+        updateProject({ messageTemplates: messages });
+
+        // 再保存到文件
+        invoke("save_project_to_file", {
+          projectJson: JSON.stringify(updatedProject, null, 2),
+          filePath: currentProject.projectPath,
+        })
+          .then(() => {
+            console.log("[CANMessageSender] ✓ Messages saved to project");
+          })
+          .catch((err) => {
+            console.error("[CANMessageSender] ✗ Failed to save project:", err);
+          });
+      }, 10000); // 10秒防抖
+
+      return () => clearTimeout(saveTimer);
+    }
+  }, [messages, currentProject?.id, currentProject?.projectPath]);
 
   // 清理定时器
   useEffect(() => {

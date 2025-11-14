@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -20,7 +20,7 @@ pub struct CANMessage {
     pub data: String,
     pub timestamp: u64,
     pub is_extended: bool,
-    pub raw_bytes: String,  // 原始字节数据（十六进制字符串）
+    pub raw_bytes: String, // 原始字节数据（十六进制字符串）
 }
 
 pub struct SendMessage {
@@ -84,7 +84,7 @@ impl SerialManager {
         let reader_thread = thread::spawn(move || {
             println!("[SERIAL THREAD] I/O 线程已启动");
             let mut buffer = vec![0u8; 1024];
-            let mut message_buffer = Vec::new();  // 消息缓冲区
+            let mut message_buffer = Vec::new(); // 消息缓冲区
 
             while !should_stop.load(Ordering::Relaxed) {
                 // 尝试接收写入请求（非阻塞）
@@ -107,11 +107,17 @@ impl SerialManager {
                         match serial_port.read(&mut buffer) {
                             Ok(n) if n > 0 => {
                                 let received_data = &buffer[..n];
-                                println!("📥 [SERIAL THREAD] 接收 {} 字节: {:02X?}", n, received_data);
+                                println!(
+                                    "📥 [SERIAL THREAD] 接收 {} 字节: {:02X?}",
+                                    n, received_data
+                                );
 
                                 // 将接收到的数据添加到消息缓冲区
                                 message_buffer.extend_from_slice(received_data);
-                                println!("📦 [SERIAL THREAD] 缓冲区大小: {} 字节", message_buffer.len());
+                                println!(
+                                    "📦 [SERIAL THREAD] 缓冲区大小: {} 字节",
+                                    message_buffer.len()
+                                );
 
                                 // 处理缓冲区中的消息
                                 process_message_buffer(&mut message_buffer, &app);
@@ -174,38 +180,37 @@ impl SerialManager {
         self.is_connected
     }
 
-    pub fn send_can_message(
-        &self,
-        id: &str,
-        data: &str,
-        is_extended: bool,
-    ) -> Result<(), String> {
-        println!("[SERIAL] 准备发送 CAN 消息: ID={}, Data={}, Extended={}", id, data, is_extended);
+    pub fn send_can_message(&self, id: &str, data: &str, is_extended: bool) -> Result<(), String> {
+        println!(
+            "[SERIAL] 准备发送 CAN 消息: ID={}, Data={}, Extended={}",
+            id, data, is_extended
+        );
 
         if !self.is_connected {
             eprintln!("[SERIAL ERROR] 未连接到串口");
             return Err("Not connected to serial port".to_string());
         }
 
-        let tx_send = self.tx_send.as_ref().ok_or("Send channel not available".to_string())?;
+        let tx_send = self
+            .tx_send
+            .as_ref()
+            .ok_or("Send channel not available".to_string())?;
 
         // 创建固定20字节协议数据包
-        let packet = Self::create_can_send_packet_fixed(id, data, is_extended)
-            .map_err(|e| {
-                let err_msg = format!("Failed to create CAN packet: {}", e);
-                eprintln!("[SERIAL ERROR] {}", err_msg);
-                err_msg
-            })?;
+        let packet = Self::create_can_send_packet_fixed(id, data, is_extended).map_err(|e| {
+            let err_msg = format!("Failed to create CAN packet: {}", e);
+            eprintln!("[SERIAL ERROR] {}", err_msg);
+            err_msg
+        })?;
 
         let bytes: Vec<String> = packet.iter().map(|b| format!("{:02X}", b)).collect();
         println!("[SERIAL] 发送字节 (固定20字节): {}", bytes.join(" "));
 
-        tx_send.send(SendMessage { packet })
-            .map_err(|e| {
-                let err_msg = format!("Failed to send message through channel: {}", e);
-                eprintln!("[SERIAL ERROR] {}", err_msg);
-                err_msg
-            })?;
+        tx_send.send(SendMessage { packet }).map_err(|e| {
+            let err_msg = format!("Failed to send message through channel: {}", e);
+            eprintln!("[SERIAL ERROR] {}", err_msg);
+            err_msg
+        })?;
 
         println!("[SERIAL] ✓ 消息已加入发送队列");
         Ok(())
@@ -224,11 +229,15 @@ impl SerialManager {
     /// - 字节10-17: CAN 数据 (8字节，不足补0)
     /// - 字节18: 0x00 (保留)
     /// - 字节19: 校验码 (从字节2到字节18的累加和低8位)
-    fn create_can_send_packet_fixed(id: &str, data: &str, is_extended: bool) -> Result<Vec<u8>, String> {
+    fn create_can_send_packet_fixed(
+        id: &str,
+        data: &str,
+        is_extended: bool,
+    ) -> Result<Vec<u8>, String> {
         // 解析 CAN ID
         let id_clean = id.trim_start_matches("0x").trim_start_matches("0X");
-        let can_id = u32::from_str_radix(id_clean, 16)
-            .map_err(|e| format!("Invalid CAN ID: {}", e))?;
+        let can_id =
+            u32::from_str_radix(id_clean, 16).map_err(|e| format!("Invalid CAN ID: {}", e))?;
 
         // 验证 ID 范围
         if !is_extended && can_id > 0x7FF {
@@ -316,7 +325,10 @@ impl SerialManager {
         let first_char = line.chars().next().unwrap();
         let is_extended = first_char == 'X';
 
-        println!("[PARSE] 首字符: '{}', 是否扩展帧: {}", first_char, is_extended);
+        println!(
+            "[PARSE] 首字符: '{}', 是否扩展帧: {}",
+            first_char, is_extended
+        );
 
         if first_char != 'T' && !is_extended {
             println!("[PARSE] ✗ 首字符不是 'T' 或 'X'");
@@ -367,7 +379,7 @@ impl SerialManager {
             data: data.to_string(),
             timestamp,
             is_extended,
-            raw_bytes: line.to_string(),  // 保存原始文本
+            raw_bytes: line.to_string(), // 保存原始文本
         })
     }
 }
@@ -409,15 +421,19 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
 
             // 检查是否有完整的20字节数据包
             if message_buffer.len() < FIXED_PACKET_LEN {
-                println!("⏳ [PARSE] 等待更多数据（有 {} 字节，需要 {} 字节）",
-                    message_buffer.len(), FIXED_PACKET_LEN);
+                println!(
+                    "⏳ [PARSE] 等待更多数据（有 {} 字节，需要 {} 字节）",
+                    message_buffer.len(),
+                    FIXED_PACKET_LEN
+                );
                 break;
             }
 
             // 提取完整的20字节数据包
             let packet: Vec<u8> = message_buffer.drain(0..FIXED_PACKET_LEN).collect();
 
-            let raw_hex = packet.iter()
+            let raw_hex = packet
+                .iter()
                 .map(|b| format!("{:02X}", b))
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -426,8 +442,10 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
 
             // 验证数据包格式
             if packet[0] != 0xAA || packet[1] != 0x55 {
-                println!("❌ [PARSE] 数据包报头错误: {:02X} {:02X} (期望 AA 55)",
-                    packet[0], packet[1]);
+                println!(
+                    "❌ [PARSE] 数据包报头错误: {:02X} {:02X} (期望 AA 55)",
+                    packet[0], packet[1]
+                );
                 continue;
             }
 
@@ -439,8 +457,10 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
             // 验证校验码
             let checksum: u8 = packet[2..19].iter().map(|&b| b as u32).sum::<u32>() as u8;
             if packet[19] != checksum {
-                println!("❌ [PARSE] 校验码错误: 0x{:02X} (期望 0x{:02X})",
-                    packet[19], checksum);
+                println!(
+                    "❌ [PARSE] 校验码错误: 0x{:02X} (期望 0x{:02X})",
+                    packet[19], checksum
+                );
                 continue;
             }
 
@@ -448,14 +468,21 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
             let frame_type = packet[3];
             let is_extended = frame_type == 0x02;
 
-            println!("🔍 [PARSE] 帧类型: 0x{:02X} ({})",
-                frame_type, if is_extended { "扩展帧" } else { "标准帧" });
+            println!(
+                "🔍 [PARSE] 帧类型: 0x{:02X} ({})",
+                frame_type,
+                if is_extended {
+                    "扩展帧"
+                } else {
+                    "标准帧"
+                }
+            );
 
             // 解析 CAN ID (小端序，4字节)
-            let can_id = (packet[5] as u32) |
-                        ((packet[6] as u32) << 8) |
-                        ((packet[7] as u32) << 16) |
-                        ((packet[8] as u32) << 24);
+            let can_id = (packet[5] as u32)
+                | ((packet[6] as u32) << 8)
+                | ((packet[7] as u32) << 16)
+                | ((packet[8] as u32) << 24);
 
             println!("🔍 [PARSE] CAN ID: 0x{:X}", can_id);
 
@@ -491,8 +518,10 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
                 raw_bytes: raw_hex,
             };
 
-            println!("✅ [PARSE] 解析成功: ID={}, Data={}, Extended={}",
-                message.id, message.data, message.is_extended);
+            println!(
+                "✅ [PARSE] 解析成功: ID={}, Data={}, Extended={}",
+                message.id, message.data, message.is_extended
+            );
 
             // 发送到前端
             match app_handle.emit("can-message", message) {

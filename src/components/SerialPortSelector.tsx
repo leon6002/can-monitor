@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useCANStore } from "@/store/canStore";
+import { useProjectStore } from "@/store/projectStore";
 import { RefreshCw, Plug, Unplug } from "lucide-react";
 
 interface SerialPort {
@@ -30,9 +31,64 @@ export function SerialPortSelector() {
     setConnectionError,
   } = useCANStore();
 
-  const [baudRate, setBaudRate] = useState("2000000");
+  const { currentProject, updateProject } = useProjectStore();
+
+  const [baudRate, setBaudRate] = useState(() => {
+    return currentProject?.baudRate || "2000000";
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  // 从项目加载串口设置
+  useEffect(() => {
+    if (currentProject) {
+      if (currentProject.baudRate) {
+        setBaudRate(currentProject.baudRate);
+      }
+      if (currentProject.selectedPort) {
+        setSelectedPort(currentProject.selectedPort);
+      }
+    }
+  }, [currentProject?.id]);
+
+  // 保存串口设置到项目（10秒防抖）
+  useEffect(() => {
+    if (currentProject && currentProject.projectPath) {
+      const saveTimer = setTimeout(() => {
+        console.log("[SerialPortSelector] Auto-saving settings to project...");
+
+        const updatedProject = {
+          ...currentProject,
+          selectedPort,
+          baudRate,
+          updatedAt: Date.now(),
+        };
+
+        // 先更新 store
+        updateProject({
+          selectedPort,
+          baudRate,
+        });
+
+        // 再保存到文件
+        invoke("save_project_to_file", {
+          projectJson: JSON.stringify(updatedProject, null, 2),
+          filePath: currentProject.projectPath,
+        })
+          .then(() => {
+            console.log("[SerialPortSelector] ✓ Settings saved to project");
+          })
+          .catch((err) => {
+            console.error(
+              "[SerialPortSelector] ✗ Failed to save project:",
+              err
+            );
+          });
+      }, 10000); // 10秒防抖
+
+      return () => clearTimeout(saveTimer);
+    }
+  }, [selectedPort, baudRate, currentProject?.id, currentProject?.projectPath]);
 
   // 常用波特率选项
   const commonBaudRates = [

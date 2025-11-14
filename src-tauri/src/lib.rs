@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 
@@ -51,7 +53,10 @@ async fn connect_serial_port(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    println!("[COMMAND] connect_serial_port 被调用: port={}, baud={}", port_name, baud_rate);
+    println!(
+        "[COMMAND] connect_serial_port 被调用: port={}, baud={}",
+        port_name, baud_rate
+    );
     let mut manager = state.serial_manager.lock().unwrap();
     let result = manager.connect(&port_name, baud_rate, app);
     match &result {
@@ -77,7 +82,10 @@ async fn send_can_message(
     is_extended: bool,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    println!("[COMMAND] send_can_message 被调用: id={}, data={}, extended={}", id, data, is_extended);
+    println!(
+        "[COMMAND] send_can_message 被调用: id={}, data={}, extended={}",
+        id, data, is_extended
+    );
     let manager = state.serial_manager.lock().unwrap();
     let result = manager.send_can_message(&id, &data, is_extended);
     match &result {
@@ -95,6 +103,51 @@ async fn get_connection_status(state: State<'_, AppState>) -> Result<bool, Strin
     Ok(status)
 }
 
+// Project Management Commands
+
+#[tauri::command]
+async fn save_project_to_file(project_json: String, file_path: String) -> Result<(), String> {
+    println!("[COMMAND] save_project_to_file: {}", file_path);
+
+    let path = PathBuf::from(&file_path);
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+
+    // Write project JSON to file
+    fs::write(&path, project_json).map_err(|e| format!("Failed to write project file: {}", e))?;
+
+    println!("[COMMAND] ✓ Project saved successfully");
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_project_from_file(file_path: String) -> Result<String, String> {
+    println!("[COMMAND] load_project_from_file: {}", file_path);
+
+    let path = PathBuf::from(&file_path);
+
+    if !path.exists() {
+        return Err(format!("Project file not found: {}", file_path));
+    }
+
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read project file: {}", e))?;
+
+    println!("[COMMAND] ✓ Project loaded successfully");
+    Ok(content)
+}
+
+// Note: Directory selection is now handled by the frontend using @tauri-apps/plugin-dialog
+
+#[tauri::command]
+async fn check_project_exists(file_path: String) -> Result<bool, String> {
+    let path = PathBuf::from(&file_path);
+    Ok(path.exists())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     println!("========================================");
@@ -102,6 +155,7 @@ pub fn run() {
     println!("========================================");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             println!("[SETUP] 初始化应用状态");
@@ -116,6 +170,9 @@ pub fn run() {
             disconnect_serial_port,
             send_can_message,
             get_connection_status,
+            save_project_to_file,
+            load_project_from_file,
+            check_project_exists,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

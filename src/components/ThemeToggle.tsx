@@ -37,15 +37,14 @@ export function ThemeToggle() {
       variant="outline"
       size="sm"
       onClick={toggleTheme}
-      className="fixed top-6 right-6 z-50 h-9 w-9 rounded-full shadow-lg backdrop-blur-sm bg-card/80 border-border/50 hover:bg-accent/80 transition-all duration-200"
+      className="h-8 w-8 p-0"
       title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
     >
       {theme === "light" ? (
-        <Moon className="h-4 w-4" />
+        <Moon className="h-3.5 w-3.5" />
       ) : (
-        <Sun className="h-4 w-4" />
+        <Sun className="h-3.5 w-3.5" />
       )}
     </Button>
   );
 }
-
