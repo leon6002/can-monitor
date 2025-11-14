@@ -103,6 +103,35 @@ export function ProjectManager() {
     toast.success("Removed from recent projects");
   };
 
+  const handleOpenExistingProject = async () => {
+    try {
+      const result = await open({
+        directory: false,
+        multiple: false,
+        title: "Open Project File",
+        filters: [
+          {
+            name: "CAN Project",
+            extensions: ["canproject"],
+          },
+        ],
+      });
+
+      if (result && typeof result === "string") {
+        // 加载项目文件
+        const projectJson = await invoke<string>("load_project_from_file", {
+          filePath: result,
+        });
+        const project: ProjectConfig = JSON.parse(projectJson);
+        loadProject(project);
+        setIsOpen(false);
+        toast.success(`Opened project: ${project.name}`);
+      }
+    } catch (error) {
+      toast.error(`Failed to open project: ${error}`);
+    }
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("en-US", {
       month: "short",
@@ -161,16 +190,26 @@ export function ProjectManager() {
             </Card>
           )}
 
-          {/* Create New Project */}
+          {/* Open/Create Project Buttons */}
           {!isCreating ? (
-            <Button
-              onClick={() => setIsCreating(true)}
-              variant="outline"
-              className="w-full"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create New Project
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={handleOpenExistingProject}
+                variant="outline"
+                className="w-full"
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Open Project
+              </Button>
+              <Button
+                onClick={() => setIsCreating(true)}
+                variant="outline"
+                className="w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create New
+              </Button>
+            </div>
           ) : (
             <Card>
               <CardContent className="pt-4 space-y-3">

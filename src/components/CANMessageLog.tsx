@@ -300,7 +300,7 @@ export function CANMessageLog() {
               variant={showFilter ? "default" : "outline"}
               size="sm"
             >
-              <Shield className="w-4 h-4 mr-2" />
+              <Filter className="w-4 h-4 mr-2" />
               Filter
               {filterMode !== "none" && getFilterModeBadge(filterMode)}
             </Button>
@@ -341,7 +341,7 @@ export function CANMessageLog() {
           <div className="mt-4 p-4 rounded-md bg-muted/30 border space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-muted-foreground" />
+                <Filter className="w-4 h-4 text-muted-foreground" />
                 <Label className="text-sm font-medium">Message Filter</Label>
                 {getFilterModeBadge(filterMode)}
               </div>
