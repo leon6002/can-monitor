@@ -6,7 +6,7 @@ import { ThemeToggle } from "./components/ThemeToggle";
 
 function App() {
   return (
-    <div className="min-h-screen bg-background transition-colors">
+    <div className="h-screen bg-background transition-colors">
       <Toaster position="top-right" richColors />
       <div className="relative">
         <ThemeToggle />
@@ -32,11 +32,11 @@ function App() {
           <main className="flex-1 overflow-hidden">
             <div className="max-w-7xl mx-auto h-full p-6">
               <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="space-y-6 overflow-y-auto">
+                <div className="space-y-6h-full overflow-hidden">
                   <SerialPortSelector />
                   <CANMessageSender />
                 </div>
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 h-full overflow-hidden">
                   <CANMessageLog />
                 </div>
               </div>

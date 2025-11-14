@@ -31,7 +31,7 @@ interface CANStore {
   maxMessages: number;
 
   // Filtering
-  filterMode: "none" | "whitelist" | "blacklist";
+  filterMode: "none" | "whitelist" | "blacklist" | "block";
   filterRules: FilterRule[];
 
   // Actions
@@ -40,9 +40,11 @@ interface CANStore {
   setIsConnected: (connected: boolean) => void;
   setConnectionError: (error: string | null) => void;
   addMessage: (message: CANMessage) => void;
+  addMessages: (messages: CANMessage[]) => void; // 批量添加
   clearMessages: () => void;
   setMaxMessages: (max: number) => void;
-  setFilterMode: (mode: "none" | "whitelist" | "blacklist") => void;
+  setFilterMode: (mode: "none" | "whitelist" | "blacklist" | "block") => void;
+  shouldBlockMessage: (messageId: string) => boolean; // 检查消息是否应该被屏蔽
   addFilterRule: (rule: FilterRule) => void;
   removeFilterRule: (id: string) => void;
   toggleFilterRule: (id: string) => void;
@@ -56,7 +58,7 @@ export const useCANStore = create<CANStore>((set) => ({
   isConnected: false,
   connectionError: null,
   messages: [],
-  maxMessages: 500, // 默认最多500条
+  maxMessages: 50, // 默认最多200条，减少渲染压力
   filterMode: "none",
   filterRules: [],
 
@@ -68,12 +70,28 @@ export const useCANStore = create<CANStore>((set) => ({
 
   addMessage: (message) =>
     set((state) => {
-      const newMessages = [...state.messages, message];
-      // Keep only the last maxMessages
-      if (newMessages.length > state.maxMessages) {
-        newMessages.shift();
+      // 如果已经达到最大数量，直接替换最旧的消息（更高效）
+      if (state.messages.length >= state.maxMessages) {
+        const newMessages = [...state.messages.slice(1), message];
+        return { messages: newMessages };
       }
-      return { messages: newMessages };
+
+      // 否则直接添加
+      return { messages: [...state.messages, message] };
+    }),
+
+  // 批量添加消息，性能更好
+  addMessages: (newMessages) =>
+    set((state) => {
+      const combined = [...state.messages, ...newMessages];
+
+      // Keep only the last maxMessages
+      if (combined.length > state.maxMessages) {
+        const excess = combined.length - state.maxMessages;
+        return { messages: combined.slice(excess) };
+      }
+
+      return { messages: combined };
     }),
 
   clearMessages: () => set({ messages: [] }),
@@ -105,4 +123,32 @@ export const useCANStore = create<CANStore>((set) => ({
         rule.id === id ? { ...rule, mask } : rule
       ),
     })),
+
+  // 检查消息是否应该被屏蔽（在 block 模式下使用）
+  shouldBlockMessage: (messageId: string): boolean => {
+    const state = useCANStore.getState();
+
+    // 只在 block 模式下屏蔽
+    if (state.filterMode !== "block") {
+      return false;
+    }
+
+    const enabledRules = state.filterRules.filter(
+      (rule: FilterRule) => rule.enabled
+    );
+    if (enabledRules.length === 0) {
+      return false;
+    }
+
+    const msgId = parseInt(messageId, 16);
+    if (isNaN(msgId)) {
+      return false;
+    }
+
+    // 如果消息 ID 匹配任何启用的规则，则屏蔽
+    return enabledRules.some((rule: FilterRule) => {
+      const ruleId = parseInt(rule.mask, 16);
+      return !isNaN(ruleId) && msgId === ruleId;
+    });
+  },
 }));

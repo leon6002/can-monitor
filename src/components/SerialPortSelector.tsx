@@ -2,13 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -149,7 +143,7 @@ export function SerialPortSelector() {
                 <SelectValue placeholder="Select port..." />
               </SelectTrigger>
               <SelectContent>
-                {availablePorts.map((port) => (
+                {availablePorts.map((port: SerialPort) => (
                   <SelectItem key={port.path} value={port.path}>
                     {port.name}
                   </SelectItem>

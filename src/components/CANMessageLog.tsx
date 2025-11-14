@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useCANStore, CANMessage } from "@/store/canStore";
+import { useCANStore, CANMessage, FilterRule } from "@/store/canStore";
 import {
   Trash2,
   Download,
@@ -39,7 +39,7 @@ import {
 export function CANMessageLog() {
   const {
     messages,
-    addMessage,
+    addMessages,
     clearMessages,
     filterMode,
     filterRules,
@@ -50,6 +50,7 @@ export function CANMessageLog() {
     removeFilterRule,
     toggleFilterRule,
     updateFilterRule,
+    shouldBlockMessage,
   } = useCANStore();
   const [selectedMessage, setSelectedMessage] = useState<CANMessage | null>(
     null
@@ -61,43 +62,87 @@ export function CANMessageLog() {
   );
   const [newFilterId, setNewFilterId] = useState("");
 
+  // 使用 requestAnimationFrame 节流批量更新
+  const messageBufferRef = useRef<CANMessage[]>([]);
+  const rafIdRef = useRef<number | null>(null);
+
   useEffect(() => {
+    const addMessagesRef = addMessages;
+    const shouldBlockRef = shouldBlockMessage;
+
+    const flushBuffer = () => {
+      if (messageBufferRef.current.length > 0) {
+        // 在 block 模式下，过滤掉被屏蔽的消息
+        const messagesToAdd = messageBufferRef.current.filter(
+          (msg) => !shouldBlockRef(msg.id)
+        );
+
+        if (messagesToAdd.length > 0) {
+          addMessagesRef(messagesToAdd);
+        }
+
+        messageBufferRef.current = [];
+      }
+      rafIdRef.current = null;
+    };
+
     const unlisten = listen<CANMessage>("can-message", (event) => {
-      addMessage(event.payload);
+      // 添加到缓冲区
+      messageBufferRef.current.push(event.payload);
+
+      // 如果还没有安排更新，使用 RAF 安排一次
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(flushBuffer);
+      }
     });
 
     return () => {
       unlisten.then((fn) => fn());
-    };
-  }, [addMessage]);
-
-  const shouldDisplayMessage = (message: CANMessage): boolean => {
-    if (filterMode === "none") return true;
-
-    const messageId = parseInt(message.id, 16);
-    const enabledRules = filterRules.filter((rule) => rule.enabled);
-
-    if (enabledRules.length === 0) return true;
-
-    for (const rule of enabledRules) {
-      const maskId = parseInt(rule.mask, 16);
-      if (isNaN(maskId)) continue;
-
-      if (filterMode === "whitelist") {
-        // Show only if ID matches any whitelist rule
-        if (messageId === maskId) return true;
-      } else if (filterMode === "blacklist") {
-        // Hide if ID matches any blacklist rule
-        if (messageId === maskId) return false;
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
       }
+      // 清理时刷新剩余消息
+      flushBuffer();
+    };
+  }, []); // 空依赖数组，只在组件挂载时创建一次监听器
+
+  // 使用 useMemo 缓存过滤后的消息，避免每次渲染都重新计算
+  const filteredMessages = useMemo(() => {
+    // block 模式：消息已经在接收时被过滤，直接显示所有消息
+    if (filterMode === "none" || filterMode === "block") {
+      return [...messages].reverse();
     }
 
-    // Default behavior
-    return filterMode === "blacklist";
-  };
+    const enabledRules = filterRules.filter((rule: FilterRule) => rule.enabled);
+    if (enabledRules.length === 0) {
+      return [...messages].reverse();
+    }
 
-  // 反转消息顺序，最新的在最上面
-  const filteredMessages = messages.filter(shouldDisplayMessage).reverse();
+    // 预处理规则 ID，避免在循环中重复解析
+    const parsedRules = enabledRules
+      .map((rule: FilterRule) => ({
+        id: parseInt(rule.mask, 16),
+        enabled: rule.enabled,
+      }))
+      .filter((rule: { id: number; enabled: boolean }) => !isNaN(rule.id));
+
+    const filtered = messages.filter((message: CANMessage) => {
+      const messageId = parseInt(message.id, 16);
+      if (isNaN(messageId)) return false;
+
+      for (const rule of parsedRules) {
+        if (filterMode === "whitelist") {
+          if (messageId === rule.id) return true;
+        } else if (filterMode === "blacklist") {
+          if (messageId === rule.id) return false;
+        }
+      }
+
+      return filterMode === "blacklist";
+    });
+
+    return filtered.reverse();
+  }, [messages, filterMode, filterRules]);
 
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp);
@@ -161,6 +206,8 @@ export function CANMessageLog() {
         return <List className="w-4 h-4" />;
       case "blacklist":
         return <Ban className="w-4 h-4" />;
+      case "block":
+        return <Shield className="w-4 h-4" />;
       default:
         return <Filter className="w-4 h-4" />;
     }
@@ -180,6 +227,12 @@ export function CANMessageLog() {
             Blacklist
           </Badge>
         );
+      case "block":
+        return (
+          <Badge variant="default" className="text-xs bg-orange-600">
+            Block
+          </Badge>
+        );
       default:
         return (
           <Badge variant="secondary" className="text-xs">
@@ -194,7 +247,8 @@ export function CANMessageLog() {
       const csv = [
         "Timestamp,ID,Extended,Data",
         ...filteredMessages.map(
-          (msg) => `${msg.timestamp},${msg.id},${msg.isExtended},${msg.data}`
+          (msg: CANMessage) =>
+            `${msg.timestamp},${msg.id},${msg.isExtended},${msg.data}`
         ),
       ].join("\n");
 
@@ -222,19 +276,17 @@ export function CANMessageLog() {
                 <Activity className="w-5 h-5" />
                 CAN Message Log
               </CardTitle>
-              <div className="flex items-center gap-3 mt-1">
-                <CardDescription className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {filteredMessages.length} message
-                    {filteredMessages.length !== 1 ? "s" : ""}
+              <CardDescription className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-xs">
+                  {filteredMessages.length} message
+                  {filteredMessages.length !== 1 ? "s" : ""}
+                </Badge>
+                {messages.length !== filteredMessages.length && (
+                  <Badge variant="secondary" className="text-xs">
+                    {messages.length - filteredMessages.length} filtered
                   </Badge>
-                  {messages.length !== filteredMessages.length && (
-                    <Badge variant="secondary" className="text-xs">
-                      {messages.length - filteredMessages.length} filtered
-                    </Badge>
-                  )}
-                </CardDescription>
-              </div>
+                )}
+              </CardDescription>
             </div>
           </div>
 
@@ -301,9 +353,9 @@ export function CANMessageLog() {
               </Label>
               <Select
                 value={filterMode}
-                onValueChange={(value: "none" | "whitelist" | "blacklist") =>
-                  setFilterMode(value)
-                }
+                onValueChange={(
+                  value: "none" | "whitelist" | "blacklist" | "block"
+                ) => setFilterMode(value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select mode" />
@@ -312,6 +364,7 @@ export function CANMessageLog() {
                   <SelectItem value="none">Show All</SelectItem>
                   <SelectItem value="whitelist">Whitelist</SelectItem>
                   <SelectItem value="blacklist">Blacklist</SelectItem>
+                  <SelectItem value="block">Block (Don't Store)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -344,7 +397,8 @@ export function CANMessageLog() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium">
-                      Filters ({filterRules.filter((r) => r.enabled).length})
+                      Filters (
+                      {filterRules.filter((r: FilterRule) => r.enabled).length})
                     </Label>
                   </div>
 
@@ -357,7 +411,7 @@ export function CANMessageLog() {
                     </div>
                   ) : (
                     <div className="space-y-1 max-h-32 overflow-y-auto border rounded-md p-1 bg-background">
-                      {filterRules.map((rule) => (
+                      {filterRules.map((rule: FilterRule) => (
                         <div
                           key={rule.id}
                           className="flex items-center gap-1 p-1 rounded-sm hover:bg-accent/50"
@@ -399,9 +453,13 @@ export function CANMessageLog() {
                       <span className="text-green-700 dark:text-green-300">
                         Whitelist: Show only listed IDs
                       </span>
-                    ) : (
+                    ) : filterMode === "blacklist" ? (
                       <span className="text-red-700 dark:text-red-300">
                         Blacklist: Hide listed IDs
+                      </span>
+                    ) : (
+                      <span className="text-orange-700 dark:text-orange-300">
+                        Block: Don't store listed IDs (saves memory)
                       </span>
                     )}
                   </div>
@@ -429,7 +487,7 @@ export function CANMessageLog() {
                   id="max-messages"
                   type="number"
                   min="1"
-                  max="10000"
+                  max="2000"
                   value={tempMaxMessages}
                   onChange={(e) => setTempMaxMessages(e.target.value)}
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -453,65 +511,63 @@ export function CANMessageLog() {
           </div>
         )}
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
-        <div className="h-full overflow-hidden">
-          {filteredMessages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/10 rounded-md border-2 border-dashed border-muted/30">
-              <FileText className="w-12 h-12 mb-3 text-muted-foreground/50" />
-              <div className="text-center">
-                <p className="font-medium">No messages received yet</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Connect to a serial port to start monitoring CAN traffic
-                </p>
+      <CardContent className="flex-1 overflow-hidden p-6">
+        {filteredMessages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/10 rounded-md border-2 border-dashed border-muted/30">
+            <FileText className="w-12 h-12 mb-3 text-muted-foreground/50" />
+            <div className="text-center">
+              <p className="font-medium">No messages received yet</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Connect to a serial port to start monitoring CAN traffic
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex flex-col bg-background rounded-md border overflow-hidden">
+            {/* Table Header */}
+            <div className="bg-card/90 backdrop-blur-sm border-b font-mono text-xs">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2 text-muted-foreground">
+                <div className="col-span-3 font-medium">Timestamp</div>
+                <div className="col-span-2 font-medium">ID</div>
+                <div className="col-span-1 font-medium">Type</div>
+                <div className="col-span-1 font-medium">DLC</div>
+                <div className="col-span-5 font-medium">Data</div>
               </div>
             </div>
-          ) : (
-            <div className="h-full flex flex-col bg-background rounded-md border">
-              {/* Table Header */}
-              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-sm border-b font-mono text-xs">
-                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-muted-foreground">
-                  <div className="col-span-3 font-medium">Timestamp</div>
-                  <div className="col-span-2 font-medium">ID</div>
-                  <div className="col-span-1 font-medium">Type</div>
-                  <div className="col-span-1 font-medium">DLC</div>
-                  <div className="col-span-5 font-medium">Data</div>
-                </div>
-              </div>
 
-              {/* Table Body */}
-              <div className="flex-1 overflow-y-auto font-mono text-xs">
-                {filteredMessages.map((message, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors group"
-                    onClick={() => setSelectedMessage(message)}
-                  >
-                    <div className="col-span-3 text-muted-foreground font-mono">
-                      {formatTimestamp(message.timestamp)}
-                    </div>
-                    <div className="col-span-2 font-semibold text-foreground group-hover:text-primary transition-colors">
-                      {message.id}
-                    </div>
-                    <div className="col-span-1">
-                      <Badge
-                        variant={message.isExtended ? "default" : "secondary"}
-                        className="text-[10px] h-5 px-1.5"
-                      >
-                        {message.isExtended ? "EXT" : "STD"}
-                      </Badge>
-                    </div>
-                    <div className="col-span-1 text-muted-foreground">
-                      {message.data.replace(/\s/g, "").length / 2}
-                    </div>
-                    <div className="col-span-5 text-foreground font-mono tracking-wide">
-                      {formatData(message.data)}
-                    </div>
+            {/* Table Body */}
+            <div className="flex-1 overflow-y-auto font-mono text-xs">
+              {filteredMessages.map((message: CANMessage, index: number) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors group"
+                  onClick={() => setSelectedMessage(message)}
+                >
+                  <div className="col-span-3 text-muted-foreground font-mono">
+                    {formatTimestamp(message.timestamp)}
                   </div>
-                ))}
-              </div>
+                  <div className="col-span-2 font-semibold text-foreground group-hover:text-primary transition-colors">
+                    {message.id}
+                  </div>
+                  <div className="col-span-1">
+                    <Badge
+                      variant={message.isExtended ? "default" : "secondary"}
+                      className="text-[10px] h-5 px-1.5"
+                    >
+                      {message.isExtended ? "EXT" : "STD"}
+                    </Badge>
+                  </div>
+                  <div className="col-span-1 text-muted-foreground">
+                    {message.data.replace(/\s/g, "").length / 2}
+                  </div>
+                  <div className="col-span-5 text-foreground font-mono tracking-wide">
+                    {formatData(message.data)}
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
 
       {/* Message Detail Modal */}
@@ -552,7 +608,7 @@ export function CANMessageLog() {
                     </Label>
                     <div className="p-3 bg-muted/50 rounded-md border">
                       <p className="font-mono text-lg font-semibold text-primary">
-                        0x{selectedMessage.id}
+                        {selectedMessage.id}
                       </p>
                     </div>
                   </div>
