@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -11,9 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { useCANStore } from "@/store/canStore";
-import { RefreshCw, Plug, Unplug, Usb, Activity } from "lucide-react";
+import { RefreshCw, Plug, Unplug } from "lucide-react";
 
 interface SerialPort {
   name: string;
@@ -113,123 +111,107 @@ export function SerialPortSelector() {
   }, []);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Usb className="w-4 h-4" />
-            <CardTitle className="text-sm">Serial Port</CardTitle>
-            {isConnected && (
-              <Badge variant="success" className="text-xs h-5 animate-pulse">
-                <Activity className="w-2 h-2 mr-1" />
-                Connected
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3 pt-0">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="port-select" className="text-xs font-medium">
-              Port
-            </Label>
-            <Select
-              value={selectedPort || ""}
-              onValueChange={setSelectedPort}
-              disabled={isConnected}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select port..." />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePorts.map((port: SerialPort) => (
-                  <SelectItem key={port.path} value={port.path}>
-                    {port.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="baud-rate" className="text-xs font-medium">
-              Baud Rate
-            </Label>
-            <Select
-              value={baudRate}
-              onValueChange={setBaudRate}
-              disabled={isConnected}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select baud rate..." />
-              </SelectTrigger>
-              <SelectContent>
-                {commonBaudRates.map((rate) => (
-                  <SelectItem key={rate} value={rate}>
-                    {rate}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="flex gap-1">
-          <Button
-            onClick={refreshPorts}
-            disabled={isConnected || isRefreshing}
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs px-2"
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="port-select" className="text-xs font-medium">
+            Port
+          </Label>
+          <Select
+            value={selectedPort || ""}
+            onValueChange={setSelectedPort}
+            disabled={isConnected}
           >
-            <RefreshCw
-              className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-          </Button>
-          {!isConnected ? (
-            <Button
-              onClick={handleConnect}
-              disabled={!selectedPort || isConnecting}
-              className="flex-1 h-7 text-xs"
-            >
-              <Plug className="w-3 h-3 mr-1" />
-              {isConnecting ? "Connecting..." : "Connect"}
-            </Button>
-          ) : (
-            <Button
-              onClick={handleDisconnect}
-              variant="destructive"
-              className="flex-1 h-7 text-xs"
-            >
-              <Unplug className="w-3 h-3 mr-1" />
-              Disconnect
-            </Button>
-          )}
+            <SelectTrigger>
+              <SelectValue placeholder="Select port..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availablePorts.map((port: SerialPort) => (
+                <SelectItem key={port.path} value={port.path}>
+                  {port.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        <div className="space-y-1">
+          <Label htmlFor="baud-rate" className="text-xs font-medium">
+            Baud Rate
+          </Label>
+          <Select
+            value={baudRate}
+            onValueChange={setBaudRate}
+            disabled={isConnected}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select baud rate..." />
+            </SelectTrigger>
+            <SelectContent>
+              {commonBaudRates.map((rate) => (
+                <SelectItem key={rate} value={rate}>
+                  {rate}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-        {connectionError && (
-          <div className="flex items-center gap-1 p-2 rounded-md bg-destructive/10 border border-destructive/20">
-            <div className="w-1.5 h-1.5 bg-destructive rounded-full"></div>
-            <p className="text-xs text-destructive">{connectionError}</p>
-          </div>
+      <div className="flex gap-1">
+        <Button
+          onClick={refreshPorts}
+          disabled={isConnected || isRefreshing}
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs px-2"
+        >
+          <RefreshCw
+            className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`}
+          />
+        </Button>
+        {!isConnected ? (
+          <Button
+            onClick={handleConnect}
+            disabled={!selectedPort || isConnecting}
+            className="flex-1 h-7 text-xs"
+          >
+            <Plug className="w-3 h-3 mr-1" />
+            {isConnecting ? "Connecting..." : "Connect"}
+          </Button>
+        ) : (
+          <Button
+            onClick={handleDisconnect}
+            variant="destructive"
+            className="flex-1 h-7 text-xs"
+          >
+            <Unplug className="w-3 h-3 mr-1" />
+            Disconnect
+          </Button>
         )}
+      </div>
 
-        {isConnected && selectedPort && (
-          <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-            <div className="flex-1">
-              <p className="text-xs font-medium text-green-800 dark:text-green-200">
-                {selectedPort.length > 25
-                  ? selectedPort.substring(0, 25) + "..."
-                  : selectedPort}
-              </p>
-              <p className="text-xs text-green-600 dark:text-green-400">
-                {baudRate} baud
-              </p>
-            </div>
+      {connectionError && (
+        <div className="flex items-center gap-1 p-2 rounded-md bg-destructive/10 border border-destructive/20">
+          <div className="w-1.5 h-1.5 bg-destructive rounded-full"></div>
+          <p className="text-xs text-destructive">{connectionError}</p>
+        </div>
+      )}
+
+      {isConnected && selectedPort && (
+        <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border">
+          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+          <div className="flex-1">
+            <p className="text-xs font-medium text-green-800 dark:text-green-200">
+              {selectedPort.length > 25
+                ? selectedPort.substring(0, 25) + "..."
+                : selectedPort}
+            </p>
+            <p className="text-xs text-green-600 dark:text-green-400">
+              {baudRate} baud
+            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 }

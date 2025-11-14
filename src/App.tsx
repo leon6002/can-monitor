@@ -1,49 +1,89 @@
+import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
 import { SerialPortSelector } from "./components/SerialPortSelector";
 import { CANMessageSender } from "./components/CANMessageSender";
 import { CANMessageLog } from "./components/CANMessageLog";
 import { ThemeToggle } from "./components/ThemeToggle";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./components/ui/accordion";
+import { Badge } from "./components/ui/badge";
+import { useCANStore } from "./store/canStore";
+import { Activity } from "lucide-react";
 
 function App() {
-  return (
-    <div className="h-screen bg-background transition-colors">
-      <Toaster position="top-right" richColors />
-      <div className="relative">
-        <ThemeToggle />
-        <div className="flex flex-col h-screen">
-          {/* Header */}
-          <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-            <div className="max-w-7xl mx-auto px-6 py-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                    <div className="w-3 h-3 bg-primary rounded-full animate-pulse"></div>
-                    CAN Monitor
-                  </h1>
-                  <p className="text-muted-foreground mt-1">
-                    Cross-platform CAN signal monitoring and transmission tool
-                  </p>
-                </div>
-              </div>
-            </div>
-          </header>
+  const isConnected = useCANStore((state) => state.isConnected);
+  const [accordionValue, setAccordionValue] = useState<string[]>([
+    "serial-port",
+  ]);
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-hidden">
-            <div className="max-w-7xl mx-auto h-full p-6">
-              <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="space-y-6h-full overflow-hidden">
-                  <SerialPortSelector />
-                  <CANMessageSender />
-                </div>
-                <div className="lg:col-span-2 h-full overflow-hidden">
-                  <CANMessageLog />
-                </div>
+  // 连接成功后自动折叠 Serial Port accordion
+  useEffect(() => {
+    if (isConnected) {
+      setAccordionValue([]);
+    }
+  }, [isConnected]);
+  return (
+    <div className="h-screen bg-background transition-colors relative">
+      <Toaster position="top-right" richColors />
+
+      {/* Theme Toggle - Fixed Position */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
+
+      {/* Main Content */}
+      <main className="h-full overflow-hidden">
+        <div className="container mx-auto h-full px-4 py-4 max-w-[1800px]">
+          <div className="h-full grid grid-cols-1 lg:grid-cols-[500px_1fr] gap-4">
+            {/* Left Sidebar */}
+            <div className="h-full flex flex-col gap-4 overflow-y-auto">
+              <Accordion
+                type="multiple"
+                value={accordionValue}
+                onValueChange={setAccordionValue}
+                className="flex-none"
+              >
+                <AccordionItem
+                  value="serial-port"
+                  className="border rounded-lg px-4 bg-card"
+                >
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-primary rounded-full"></div>
+                      <span className="font-semibold">Serial Port</span>
+                      {isConnected && (
+                        <Badge
+                          variant="success"
+                          className="text-xs h-5 animate-pulse ml-auto"
+                        >
+                          <Activity className="w-2 h-2 mr-1" />
+                          Connected
+                        </Badge>
+                      )}
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <SerialPortSelector />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
+              <div className="flex-1 min-h-0">
+                <CANMessageSender />
               </div>
             </div>
-          </main>
+
+            {/* Right Content - Message Log */}
+            <div className="h-full overflow-hidden">
+              <CANMessageLog />
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
