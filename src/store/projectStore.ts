@@ -7,6 +7,7 @@ export interface CANMessageTemplate {
   data: string;
   isExtended: boolean;
   selected: boolean;
+  name?: string; // 消息名称/备注
 }
 
 export interface ProjectConfig {
@@ -14,14 +15,14 @@ export interface ProjectConfig {
   name: string;
   createdAt: number;
   updatedAt: number;
-  
+
   // Serial Port Settings
   selectedPort: string | null;
   baudRate: string;
-  
+
   // CAN Message Templates
   messageTemplates: CANMessageTemplate[];
-  
+
   // Filter Settings
   filterMode: "none" | "whitelist" | "blacklist" | "block";
   filterRules: Array<{
@@ -29,10 +30,10 @@ export interface ProjectConfig {
     mask: string;
     enabled: boolean;
   }>;
-  
+
   // Other Settings
   maxMessages: number;
-  
+
   // Project Path
   projectPath: string | null;
 }
@@ -40,7 +41,7 @@ export interface ProjectConfig {
 interface ProjectStore {
   // Current Project
   currentProject: ProjectConfig | null;
-  
+
   // Recent Projects
   recentProjects: Array<{
     id: string;
@@ -48,7 +49,7 @@ interface ProjectStore {
     path: string;
     lastOpened: number;
   }>;
-  
+
   // Actions
   createProject: (name: string, projectPath: string) => ProjectConfig;
   loadProject: (project: ProjectConfig) => void;
@@ -95,7 +96,11 @@ export const useProjectStore = create<ProjectStore>()(
 
       loadProject: (project: ProjectConfig) => {
         set({ currentProject: { ...project, updatedAt: Date.now() } });
-        get().addRecentProject(project.id, project.name, project.projectPath || "");
+        get().addRecentProject(
+          project.id,
+          project.name,
+          project.projectPath || ""
+        );
       },
 
       updateProject: (updates: Partial<ProjectConfig>) => {
@@ -114,7 +119,7 @@ export const useProjectStore = create<ProjectStore>()(
       saveProject: () => {
         const current = get().currentProject;
         if (!current) return;
-        
+
         // This will trigger the save through Tauri command
         set({
           currentProject: {
@@ -154,4 +159,3 @@ export const useProjectStore = create<ProjectStore>()(
     }
   )
 );
-

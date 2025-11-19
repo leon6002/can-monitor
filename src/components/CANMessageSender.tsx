@@ -17,6 +17,7 @@ interface CANMessageItem {
   data: string;
   isExtended: boolean;
   selected: boolean;
+  name?: string; // 消息名称/备注
 }
 
 export function CANMessageSender() {
@@ -41,12 +42,12 @@ export function CANMessageSender() {
 
   // 发送控制
   const [isSending, setIsSending] = useState(false);
-  const [sendMode, setSendMode] = useState<"once" | "loop">("once");
+  const [sendMode, setSendMode] = useState<"next" | "all" | "loop">("next");
   const [loopInterval, setLoopInterval] = useState("100");
   const [sentCount, setSentCount] = useState(0);
 
   const sendTimerRef = useRef<number | null>(null);
-  const currentIndexRef = useRef(0);
+  const currentIndexRef = useRef(0); // 用于跟踪下一条要发送的消息
 
   // 从项目加载消息模板
   useEffect(() => {
@@ -86,6 +87,11 @@ export function CANMessageSender() {
       return () => clearTimeout(saveTimer);
     }
   }, [messages, currentProject?.id, currentProject?.projectPath]);
+
+  // 当选中的消息变化时，重置索引
+  useEffect(() => {
+    currentIndexRef.current = 0;
+  }, [messages.filter((msg) => msg.selected).length]);
 
   // 清理定时器
   useEffect(() => {
@@ -149,6 +155,7 @@ export function CANMessageSender() {
       data: defaultData,
       isExtended: false,
       selected: true, // 默认选中
+      name: "", // 默认空名称
     };
 
     setMessages((prev) => [...prev, newMessage]);
@@ -180,7 +187,7 @@ export function CANMessageSender() {
   // 编辑消息
   const handleEditMessage = (
     id: string,
-    field: "canId" | "data",
+    field: "canId" | "data" | "name",
     value: string
   ) => {
     setMessages((prev) =>
@@ -214,11 +221,32 @@ export function CANMessageSender() {
       }
     }
 
+    if (sendMode === "next") {
+      // 轮流发送：每次点击发送下一条选中的消息
+      try {
+        const msg = selected[currentIndexRef.current];
+        await sendMessage(msg.canId, msg.data, msg.isExtended);
+
+        const msgName = msg.name ? `"${msg.name}"` : `ID ${msg.canId}`;
+        toast.success(
+          `Sent ${msgName} (${currentIndexRef.current + 1}/${selected.length})`
+        );
+
+        // 移动到下一条消息（循环）
+        currentIndexRef.current =
+          (currentIndexRef.current + 1) % selected.length;
+        setSentCount((prev) => prev + 1);
+      } catch (err) {
+        toast.error(`Failed: ${err}`);
+      }
+      return;
+    }
+
     setIsSending(true);
     setSentCount(0);
 
-    if (sendMode === "once") {
-      // 单次发送所有选中的消息
+    if (sendMode === "all") {
+      // 一次性发送所有选中的消息
       try {
         for (const msg of selected) {
           await sendMessage(msg.canId, msg.data, msg.isExtended);
@@ -338,61 +366,82 @@ export function CANMessageSender() {
             {messages.map((msg, index) => (
               <div
                 key={msg.id}
-                className={`flex items-center gap-2 p-2 rounded border ${
+                className={`p-2 rounded border space-y-1.5 ${
                   msg.selected ? "bg-primary/10 border-primary" : "bg-muted/30"
                 }`}
               >
-                <Checkbox
-                  checked={msg.selected}
-                  onCheckedChange={() => toggleSelect(msg.id)}
-                  disabled={isSending}
-                />
-                <Badge variant="outline" className="text-xs h-5 w-6">
-                  {index + 1}
-                </Badge>
-                <Input
-                  value={msg.canId}
-                  onChange={(e) =>
-                    handleEditMessage(
-                      msg.id,
-                      "canId",
-                      e.target.value.toUpperCase()
-                    )
-                  }
-                  disabled={isSending}
-                  maxLength={msg.isExtended ? 8 : 3}
-                  className="font-mono h-6 text-xs w-20"
-                />
-                <Button
-                  onClick={() => toggleExtended(msg.id)}
-                  disabled={isSending}
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs px-2"
-                >
-                  {msg.isExtended ? "EXT" : "STD"}
-                </Button>
-                <Input
-                  value={msg.data}
-                  onChange={(e) =>
-                    handleEditMessage(
-                      msg.id,
-                      "data",
-                      e.target.value.toUpperCase()
-                    )
-                  }
-                  disabled={isSending}
-                  className="font-mono h-6 text-xs flex-1"
-                />
-                <Button
-                  onClick={() => handleRemoveMessage(msg.id)}
-                  disabled={isSending}
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 hover:bg-destructive/20"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
+                {/* 第一行：序号、名称、删除按钮 */}
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={msg.selected}
+                    onCheckedChange={() => toggleSelect(msg.id)}
+                    disabled={isSending}
+                  />
+                  <Badge
+                    variant="outline"
+                    className="text-xs h-5 w-6 flex-shrink-0"
+                  >
+                    {index + 1}
+                  </Badge>
+                  <Input
+                    value={msg.name || ""}
+                    onChange={(e) =>
+                      handleEditMessage(msg.id, "name", e.target.value)
+                    }
+                    disabled={isSending}
+                    placeholder="Message name..."
+                    className="h-6 text-xs flex-1"
+                  />
+                  <Button
+                    onClick={() => handleRemoveMessage(msg.id)}
+                    disabled={isSending}
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 hover:bg-destructive/20 flex-shrink-0"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+
+                {/* 第二行：ID、类型、数据 */}
+                <div className="flex items-center gap-2 pl-8">
+                  <Input
+                    value={msg.canId}
+                    onChange={(e) =>
+                      handleEditMessage(
+                        msg.id,
+                        "canId",
+                        e.target.value.toUpperCase()
+                      )
+                    }
+                    disabled={isSending}
+                    maxLength={msg.isExtended ? 8 : 3}
+                    placeholder="ID"
+                    className="font-mono h-6 text-xs w-20"
+                  />
+                  <Button
+                    onClick={() => toggleExtended(msg.id)}
+                    disabled={isSending}
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                  >
+                    {msg.isExtended ? "EXT" : "STD"}
+                  </Button>
+                  <Input
+                    value={msg.data}
+                    onChange={(e) =>
+                      handleEditMessage(
+                        msg.id,
+                        "data",
+                        e.target.value.toUpperCase()
+                      )
+                    }
+                    disabled={isSending}
+                    placeholder="Data (hex)"
+                    className="font-mono h-6 text-xs flex-1"
+                  />
+                </div>
               </div>
             ))}
 
@@ -412,25 +461,34 @@ export function CANMessageSender() {
 
         {/* 发送控制 */}
         <div className="space-y-2 p-2 rounded-md bg-muted/30 border">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-2">
             <div className="space-y-1">
               <Label className="text-xs">Mode</Label>
-              <div className="flex gap-1">
+              <div className="grid grid-cols-3 gap-1">
                 <Button
-                  onClick={() => setSendMode("once")}
+                  onClick={() => setSendMode("next")}
                   disabled={isSending}
-                  variant={sendMode === "once" ? "default" : "outline"}
+                  variant={sendMode === "next" ? "default" : "outline"}
                   size="sm"
-                  className="flex-1 h-7 text-xs"
+                  className="h-7 text-xs"
                 >
-                  Once
+                  Next
+                </Button>
+                <Button
+                  onClick={() => setSendMode("all")}
+                  disabled={isSending}
+                  variant={sendMode === "all" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                >
+                  All
                 </Button>
                 <Button
                   onClick={() => setSendMode("loop")}
                   disabled={isSending}
                   variant={sendMode === "loop" ? "default" : "outline"}
                   size="sm"
-                  className="flex-1 h-7 text-xs"
+                  className="h-7 text-xs"
                 >
                   Loop
                 </Button>
@@ -459,7 +517,11 @@ export function CANMessageSender() {
               className="w-full h-7 text-xs bg-green-600 hover:bg-green-700"
             >
               <Send className="w-3 h-3 mr-1" />
-              Send Selected ({selectedCount})
+              {sendMode === "next"
+                ? `Send Next (${selectedCount} selected)`
+                : sendMode === "all"
+                ? `Send All (${selectedCount})`
+                : `Start Loop (${selectedCount})`}
             </Button>
           ) : (
             <Button
