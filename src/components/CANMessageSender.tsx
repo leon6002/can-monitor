@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCANStore } from "@/store/canStore";
 import { useProjectStore } from "@/store/projectStore";
-import { Send, Plus, Trash2, Square, Radio } from "lucide-react";
+import { Send, Plus, Trash2, Square, Radio, FileUp, ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
 
 interface CANMessageItem {
   id: string;
@@ -18,10 +18,60 @@ interface CANMessageItem {
   isExtended: boolean;
   selected: boolean;
   name?: string; // 消息名称/备注
+  group?: string; // 分组名称
+}
+
+interface CSVMessageItem {
+  canId: string;
+  data: string;
+  isExtended: boolean;
+  interval: number;
+}
+
+// Debounced Input Component
+function DebouncedInput({
+  value: initialValue,
+  onChange,
+  debounce = 3000,
+  ...props
+}: {
+  value: string | number;
+  onChange: (value: string | number) => void;
+  debounce?: number;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange">) {
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (value !== initialValue) {
+        onChange(value);
+      }
+    }, debounce);
+
+    return () => clearTimeout(timeout);
+  }, [value, debounce, initialValue, onChange]);
+
+  return (
+    <Input
+      {...props}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value !== initialValue) {
+          onChange(value);
+        }
+      }}
+    />
+  );
 }
 
 export function CANMessageSender() {
   const isConnected = useCANStore((state) => state.isConnected);
+  const addSentMessage = useCANStore((state) => state.addSentMessage);
   const { currentProject, updateProject } = useProjectStore();
 
   // 消息列表 - 从项目加载或使用默认值
@@ -42,12 +92,44 @@ export function CANMessageSender() {
 
   // 发送控制
   const [isSending, setIsSending] = useState(false);
-  const [sendMode, setSendMode] = useState<"next" | "all" | "loop">("next");
+  const [sendMode, setSendMode] = useState<"next" | "all" | "loop" | "csv">("next");
   const [loopInterval, setLoopInterval] = useState("100");
   const [sentCount, setSentCount] = useState(0);
 
+  // CSV 发送相关状态
+  const [csvSequence, setCsvSequence] = useState<CSVMessageItem[]>([]);
+  const [csvFileName, setCsvFileName] = useState<string>("");
+  const [csvTotal, setCsvTotal] = useState(0);
+  const [csvCurrent, setCsvCurrent] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Grouping State
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  // Initialize expanded state for new groups
+  useEffect(() => {
+    const groups = new Set(messages.map(m => m.group || "ungrouped"));
+    setExpandedGroups(prev => {
+      const next = { ...prev };
+      groups.forEach(g => {
+        if (next[g] === undefined) next[g] = true; // Default open
+      });
+      return next;
+    });
+  }, [messages]);
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
+  };
+
   const sendTimerRef = useRef<number | null>(null);
   const currentIndexRef = useRef(0); // 用于跟踪下一条要发送的消息
+  const isSendingRef = useRef(false); // Ref to track sending status for async closures
+
+  // Sync isSending state to ref
+  useEffect(() => {
+    isSendingRef.current = isSending;
+  }, [isSending]);
 
   // 从项目加载消息模板
   useEffect(() => {
@@ -142,6 +224,15 @@ export function CANMessageSender() {
       data: dataClean,
       isExtended: extended,
     });
+
+    // Record sent message
+    addSentMessage({
+      id: id.toUpperCase(),
+      data: dataClean.toUpperCase(),
+      isExtended: extended,
+      timestamp: Date.now(),
+      rawBytes: "", // Not needed for sent messages or can be formatted from data
+    });
   };
 
   // 添加消息到列表（使用默认值）
@@ -187,7 +278,7 @@ export function CANMessageSender() {
   // 编辑消息
   const handleEditMessage = (
     id: string,
-    field: "canId" | "data" | "name",
+    field: "canId" | "data" | "name" | "group",
     value: string
   ) => {
     setMessages((prev) =>
@@ -287,11 +378,138 @@ export function CANMessageSender() {
   // 停止发送
   const handleStopSending = () => {
     if (sendTimerRef.current) {
-      clearInterval(sendTimerRef.current);
+      clearInterval(sendTimerRef.current); // Works for setInterval
+      clearTimeout(sendTimerRef.current);  // Works for setTimeout
       sendTimerRef.current = null;
     }
     setIsSending(false);
     toast.success(`Stopped (sent ${sentCount} messages)`);
+  };
+
+  // 解析 CSV 内容
+  const parseCSV = (content: string): CSVMessageItem[] => {
+    const lines = content.split(/\r?\n/);
+    const result: CSVMessageItem[] = [];
+
+    // 跳过标题行 (假设第一行是标题)
+    const startIndex = lines[0].toLowerCase().includes("id") ? 1 : 0;
+
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const parts = line.split(",");
+      if (parts.length < 3) continue;
+
+      // 1. ID: 去掉 0x, 转大写
+      let idStr = parts[0].trim().replace(/^0x/i, "").toUpperCase();
+
+      // 2. Type: std/ext
+      const typeStr = parts[1].trim().toLowerCase();
+      const isExtended = typeStr === "ext";
+
+      // 3. Data: 去掉空格, 转大写
+      const dataStr = parts[2].trim().replace(/\s/g, "").toUpperCase();
+
+      // 4. Interval: 默认 1000ms
+      let interval = 1000;
+      if (parts.length > 3) {
+        const intervalStr = parts[3].trim();
+        if (intervalStr) {
+          const parsed = parseInt(intervalStr);
+          if (!isNaN(parsed) && parsed > 0) {
+            interval = parsed;
+          }
+        }
+      }
+
+      result.push({
+        canId: idStr,
+        data: dataStr,
+        isExtended,
+        interval
+      });
+    }
+    return result;
+  };
+
+  // 处理文件上传
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      try {
+        const parsed = parseCSV(content);
+        setCsvSequence(parsed);
+        setCsvTotal(parsed.length);
+        setCsvCurrent(0);
+        toast.success(`Loaded ${parsed.length} messages from CSV`);
+      } catch (err) {
+        toast.error("Failed to parse CSV file");
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    // 清空 input value，允许重复选择同一文件
+    event.target.value = "";
+  };
+
+  // 开始 CSV 序列发送
+  const handleSendCsv = async () => {
+    if (csvSequence.length === 0) {
+      toast.error("No CSV messages loaded");
+      return;
+    }
+
+    setIsSending(true);
+    isSendingRef.current = true; // Immediately update ref to allow processSequence to start
+    setSentCount(0);
+    setCsvCurrent(0);
+    currentIndexRef.current = 0;
+
+    const processSequence = async (index: number) => {
+      // Check if stopped
+      if (!isSendingRef.current) return;
+
+      if (index >= csvSequence.length) {
+        setIsSending(false);
+        toast.success("CSV sequence completed");
+        return;
+      }
+
+      const item = csvSequence[index];
+      try {
+        await sendMessage(item.canId, item.data, item.isExtended);
+
+        // Check if stopped during await
+        if (!isSendingRef.current) return;
+
+        setSentCount(prev => prev + 1);
+        setCsvCurrent(index + 1);
+
+        // 准备发送下一条
+        if (index + 1 < csvSequence.length) {
+          const timerId = window.setTimeout(() => {
+            processSequence(index + 1);
+          }, item.interval);
+
+          sendTimerRef.current = timerId;
+        } else {
+          setIsSending(false);
+          toast.success("CSV sequence completed");
+        }
+      } catch (err) {
+        toast.error(`Error sending line ${index + 1}: ${err}`);
+        setIsSending(false);
+      }
+    };
+
+    // 开始第一条
+    processSequence(0);
   };
 
   const selectedCount = messages.filter((msg) => msg.selected).length;
@@ -363,14 +581,14 @@ export function CANMessageSender() {
           </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md p-2 bg-background space-y-1">
-            {messages.map((msg, index) => (
+            {/* Ungrouped Messages */}
+            {messages.filter(m => !m.group).map((msg) => (
               <div
                 key={msg.id}
-                className={`p-2 rounded border space-y-1.5 ${
-                  msg.selected ? "bg-primary/10 border-primary" : "bg-muted/30"
-                }`}
+                className={`p-2 rounded border space-y-1.5 ${msg.selected ? "bg-primary/10 border-primary" : "bg-muted/30"
+                  }`}
               >
-                {/* 第一行：序号、名称、删除按钮 */}
+                {/* 第一行：序号、名称、分组、删除按钮 */}
                 <div className="flex items-center gap-2">
                   <Checkbox
                     checked={msg.selected}
@@ -381,7 +599,7 @@ export function CANMessageSender() {
                     variant="outline"
                     className="text-xs h-5 w-6 flex-shrink-0"
                   >
-                    {index + 1}
+                    {messages.indexOf(msg) + 1}
                   </Badge>
                   <Input
                     value={msg.name || ""}
@@ -390,7 +608,16 @@ export function CANMessageSender() {
                     }
                     disabled={isSending}
                     placeholder="Message name..."
-                    className="h-6 text-xs flex-1"
+                    className="h-6 text-xs flex-1 min-w-[80px]"
+                  />
+                  <DebouncedInput
+                    value={msg.group || ""}
+                    onChange={(val) =>
+                      handleEditMessage(msg.id, "group", val.toString())
+                    }
+                    disabled={isSending}
+                    placeholder="Group..."
+                    className="h-6 text-xs w-20 text-muted-foreground"
                   />
                   <Button
                     onClick={() => handleRemoveMessage(msg.id)}
@@ -445,6 +672,141 @@ export function CANMessageSender() {
               </div>
             ))}
 
+            {/* Grouped Messages */}
+            {Array.from(new Set(messages.filter(m => m.group).map(m => m.group!))).sort().map(groupName => {
+              const groupMessages = messages.filter(m => m.group === groupName);
+              const isExpanded = expandedGroups[groupName] !== false; // Default to true
+
+              return (
+                <div key={groupName} className="border rounded-md overflow-hidden">
+                  <div
+                    className="flex items-center gap-2 p-2 bg-muted/50 cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => toggleGroup(groupName)}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    )}
+                    {isExpanded ? (
+                      <FolderOpen className="w-4 h-4 text-blue-500" />
+                    ) : (
+                      <Folder className="w-4 h-4 text-blue-500" />
+                    )}
+                    <span className="text-xs font-medium flex-1">{groupName}</span>
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                      {groupMessages.length}
+                    </Badge>
+                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={groupMessages.every(m => m.selected)}
+                        onCheckedChange={(checked) => {
+                          setMessages(prev => prev.map(m =>
+                            m.group === groupName ? { ...m, selected: !!checked } : m
+                          ));
+                        }}
+                        className="h-4 w-4"
+                      />
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="p-2 space-y-1 bg-muted/10">
+                      {groupMessages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`p-2 rounded border space-y-1.5 ${msg.selected ? "bg-primary/10 border-primary" : "bg-background"
+                            }`}
+                        >
+                          {/* 第一行：序号、名称、分组、删除按钮 */}
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={msg.selected}
+                              onCheckedChange={() => toggleSelect(msg.id)}
+                              disabled={isSending}
+                            />
+                            <Badge
+                              variant="outline"
+                              className="text-xs h-5 w-6 flex-shrink-0"
+                            >
+                              {messages.indexOf(msg) + 1}
+                            </Badge>
+                            <Input
+                              value={msg.name || ""}
+                              onChange={(e) =>
+                                handleEditMessage(msg.id, "name", e.target.value)
+                              }
+                              disabled={isSending}
+                              placeholder="Message name..."
+                              className="h-6 text-xs flex-1 min-w-[80px]"
+                            />
+                            <DebouncedInput
+                              value={msg.group || ""}
+                              onChange={(val) =>
+                                handleEditMessage(msg.id, "group", val.toString())
+                              }
+                              disabled={isSending}
+                              placeholder="Group..."
+                              className="h-6 text-xs w-20 text-muted-foreground"
+                            />
+                            <Button
+                              onClick={() => handleRemoveMessage(msg.id)}
+                              disabled={isSending}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 hover:bg-destructive/20 flex-shrink-0"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+
+                          {/* 第二行：ID、类型、数据 */}
+                          <div className="flex items-center gap-2 pl-8">
+                            <Input
+                              value={msg.canId}
+                              onChange={(e) =>
+                                handleEditMessage(
+                                  msg.id,
+                                  "canId",
+                                  e.target.value.toUpperCase()
+                                )
+                              }
+                              disabled={isSending}
+                              maxLength={msg.isExtended ? 8 : 3}
+                              placeholder="ID"
+                              className="font-mono h-6 text-xs w-20"
+                            />
+                            <Button
+                              onClick={() => toggleExtended(msg.id)}
+                              disabled={isSending}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs px-2"
+                            >
+                              {msg.isExtended ? "EXT" : "STD"}
+                            </Button>
+                            <Input
+                              value={msg.data}
+                              onChange={(e) =>
+                                handleEditMessage(
+                                  msg.id,
+                                  "data",
+                                  e.target.value.toUpperCase()
+                                )
+                              }
+                              disabled={isSending}
+                              placeholder="Data (hex)"
+                              className="font-mono h-6 text-xs flex-1"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
             {/* Add Message 按钮放在消息列表底部 */}
             <Button
               onClick={handleAddMessage}
@@ -464,13 +826,13 @@ export function CANMessageSender() {
           <div className="space-y-2">
             <div className="space-y-1">
               <Label className="text-xs">Mode</Label>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-4 gap-1">
                 <Button
                   onClick={() => setSendMode("next")}
                   disabled={isSending}
                   variant={sendMode === "next" ? "default" : "outline"}
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs px-1"
                 >
                   Next
                 </Button>
@@ -479,7 +841,7 @@ export function CANMessageSender() {
                   disabled={isSending}
                   variant={sendMode === "all" ? "default" : "outline"}
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs px-1"
                 >
                   All
                 </Button>
@@ -488,9 +850,18 @@ export function CANMessageSender() {
                   disabled={isSending}
                   variant={sendMode === "loop" ? "default" : "outline"}
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-7 text-xs px-1"
                 >
                   Loop
+                </Button>
+                <Button
+                  onClick={() => setSendMode("csv")}
+                  disabled={isSending}
+                  variant={sendMode === "csv" ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-1"
+                >
+                  CSV
                 </Button>
               </div>
             </div>
@@ -508,20 +879,60 @@ export function CANMessageSender() {
                 />
               </div>
             )}
+
+            {sendMode === "csv" && (
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept=".csv"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSending}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs flex-1"
+                  >
+                    <FileUp className="w-3 h-3 mr-1" />
+                    {csvFileName ? "Change CSV" : "Import CSV"}
+                  </Button>
+                </div>
+                {csvFileName && (
+                  <div className="text-xs text-muted-foreground flex justify-between items-center px-1">
+                    <span className="truncate max-w-[120px]" title={csvFileName}>{csvFileName}</span>
+                    <span>{csvTotal} msgs</span>
+                  </div>
+                )}
+                {isSending && (
+                  <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-primary h-full transition-all duration-300"
+                      style={{ width: `${(csvCurrent / csvTotal) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {!isSending ? (
             <Button
-              onClick={handleSendSelected}
-              disabled={!isConnected || selectedCount === 0}
+              onClick={sendMode === "csv" ? handleSendCsv : handleSendSelected}
+              disabled={!isConnected || (sendMode !== "csv" && selectedCount === 0) || (sendMode === "csv" && csvSequence.length === 0)}
               className="w-full h-7 text-xs bg-green-600 hover:bg-green-700"
             >
               <Send className="w-3 h-3 mr-1" />
               {sendMode === "next"
                 ? `Send Next (${selectedCount} selected)`
                 : sendMode === "all"
-                ? `Send All (${selectedCount})`
-                : `Start Loop (${selectedCount})`}
+                  ? `Send All (${selectedCount})`
+                  : sendMode === "loop"
+                    ? `Start Loop (${selectedCount})`
+                    : "Start Sequence"}
             </Button>
           ) : (
             <Button

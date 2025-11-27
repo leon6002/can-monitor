@@ -8,6 +8,7 @@ export interface CANMessageTemplate {
   isExtended: boolean;
   selected: boolean;
   name?: string; // 消息名称/备注
+  group?: string; // 分组名称
 }
 
 export interface ProjectConfig {

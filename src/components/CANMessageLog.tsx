@@ -39,8 +39,10 @@ import {
 export function CANMessageLog() {
   const {
     messages,
+    sentMessages,
     addMessages,
     clearMessages,
+    clearSentMessages,
     filterMode,
     filterRules,
     maxMessages,
@@ -52,6 +54,7 @@ export function CANMessageLog() {
     updateFilterRule,
     shouldBlockMessage,
   } = useCANStore();
+  const [activeTab, setActiveTab] = useState<"received" | "sent">("received");
   const [selectedMessage, setSelectedMessage] = useState<CANMessage | null>(
     null
   );
@@ -108,14 +111,16 @@ export function CANMessageLog() {
 
   // 使用 useMemo 缓存过滤后的消息，避免每次渲染都重新计算
   const filteredMessages = useMemo(() => {
+    const targetMessages = activeTab === "received" ? messages : sentMessages;
+
     // block 模式：消息已经在接收时被过滤，直接显示所有消息
     if (filterMode === "none" || filterMode === "block") {
-      return [...messages].reverse();
+      return [...targetMessages].reverse();
     }
 
     const enabledRules = filterRules.filter((rule: FilterRule) => rule.enabled);
     if (enabledRules.length === 0) {
-      return [...messages].reverse();
+      return [...targetMessages].reverse();
     }
 
     // 预处理规则 ID，避免在循环中重复解析
@@ -126,7 +131,7 @@ export function CANMessageLog() {
       }))
       .filter((rule: { id: number; enabled: boolean }) => !isNaN(rule.id));
 
-    const filtered = messages.filter((message: CANMessage) => {
+    const filtered = targetMessages.filter((message: CANMessage) => {
       const messageId = parseInt(message.id, 16);
       if (isNaN(messageId)) return false;
 
@@ -142,7 +147,7 @@ export function CANMessageLog() {
     });
 
     return filtered.reverse();
-  }, [messages, filterMode, filterRules]);
+  }, [messages, sentMessages, activeTab, filterMode, filterRules]);
 
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp);
@@ -276,17 +281,37 @@ export function CANMessageLog() {
                 <Activity className="w-5 h-5" />
                 CAN Message Log
               </CardTitle>
-              <CardDescription className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="text-xs">
-                  {filteredMessages.length} message
-                  {filteredMessages.length !== 1 ? "s" : ""}
-                </Badge>
-                {messages.length !== filteredMessages.length && (
-                  <Badge variant="secondary" className="text-xs">
-                    {messages.length - filteredMessages.length} filtered
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex bg-muted rounded-lg p-0.5">
+                  <Button
+                    variant={activeTab === "received" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => setActiveTab("received")}
+                  >
+                    Received
+                  </Button>
+                  <Button
+                    variant={activeTab === "sent" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    onClick={() => setActiveTab("sent")}
+                  >
+                    Sent
+                  </Button>
+                </div>
+                <CardDescription className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {filteredMessages.length} message
+                    {filteredMessages.length !== 1 ? "s" : ""}
                   </Badge>
-                )}
-              </CardDescription>
+                  {activeTab === "received" && messages.length !== filteredMessages.length && (
+                    <Badge variant="secondary" className="text-xs">
+                      {messages.length - filteredMessages.length} filtered
+                    </Badge>
+                  )}
+                </CardDescription>
+              </div>
             </div>
           </div>
 
@@ -325,10 +350,10 @@ export function CANMessageLog() {
               Export
             </Button>
             <Button
-              onClick={clearMessages}
+              onClick={activeTab === "received" ? clearMessages : clearSentMessages}
               variant="outline"
               size="sm"
-              disabled={messages.length === 0}
+              disabled={(activeTab === "received" ? messages : sentMessages).length === 0}
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Clear
@@ -338,89 +363,104 @@ export function CANMessageLog() {
 
         {/* Filter Panel */}
         {showFilter && (
-          <div className="mt-4 p-4 rounded-md bg-muted/30 border space-y-4">
+          <div className="mt-4 p-3 rounded-md bg-muted/30 border space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-muted-foreground" />
                 <Label className="text-sm font-medium">Message Filter</Label>
                 {getFilterModeBadge(filterMode)}
               </div>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                {getFilterModeIcon(filterMode)}
+                {filterMode === "whitelist" ? (
+                  <span>Whitelist: Show only listed</span>
+                ) : filterMode === "blacklist" ? (
+                  <span>Blacklist: Hide listed</span>
+                ) : filterMode === "block" ? (
+                  <span>Block: Don't store listed</span>
+                ) : (
+                  <span>Filter disabled</span>
+                )}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="filter-mode" className="text-xs font-medium">
-                Filter Mode
-              </Label>
-              <Select
-                value={filterMode}
-                onValueChange={(
-                  value: "none" | "whitelist" | "blacklist" | "block"
-                ) => setFilterMode(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select mode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Show All</SelectItem>
-                  <SelectItem value="whitelist">Whitelist</SelectItem>
-                  <SelectItem value="blacklist">Blacklist</SelectItem>
-                  <SelectItem value="block">Block (Don't Store)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="flex gap-3 items-end">
+              <div className="w-48 space-y-1.5">
+                <Label htmlFor="filter-mode" className="text-xs font-medium">
+                  Filter Mode
+                </Label>
+                <Select
+                  value={filterMode}
+                  onValueChange={(
+                    value: "none" | "whitelist" | "blacklist" | "block"
+                  ) => setFilterMode(value)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Show All</SelectItem>
+                    <SelectItem value="whitelist">Whitelist</SelectItem>
+                    <SelectItem value="blacklist">Blacklist</SelectItem>
+                    <SelectItem value="block">Block (Don't Store)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {filterMode !== "none" && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex gap-1">
-                    <div className="flex-1">
-                      <Input
-                        placeholder="CAN ID (e.g., 123)"
-                        value={newFilterId}
-                        onChange={(e) =>
-                          setNewFilterId(e.target.value.toUpperCase())
-                        }
-                        onKeyDown={handleFilterKeyDown}
-                        className="font-mono h-7 text-xs"
-                      />
-                    </div>
+              {filterMode !== "none" && (
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs font-medium">Add CAN ID</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g. 123"
+                      value={newFilterId}
+                      onChange={(e) =>
+                        setNewFilterId(e.target.value.toUpperCase())
+                      }
+                      onKeyDown={handleFilterKeyDown}
+                      className="font-mono h-8 text-xs max-w-[200px]"
+                    />
                     <Button
                       onClick={handleAddFilter}
                       size="sm"
-                      className="h-7 text-xs px-2"
+                      className="h-8 text-xs px-3"
                     >
-                      <Plus className="w-3 h-3" />
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add
                     </Button>
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium">
-                      Filters (
-                      {filterRules.filter((r: FilterRule) => r.enabled).length})
-                    </Label>
+            {filterMode !== "none" && (
+              <div className="space-y-2 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Active Filters ({filterRules.filter((r) => r.enabled).length})
+                  </Label>
+                </div>
+
+                {filterRules.length === 0 ? (
+                  <div className="flex items-center justify-center gap-1 p-4 rounded-md border border-dashed bg-muted/20">
+                    <Filter className="w-3 h-3 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      No filters added yet
+                    </p>
                   </div>
-
-                  {filterRules.length === 0 ? (
-                    <div className="flex items-center justify-center gap-1 p-3 rounded-md border border-dashed bg-muted/20">
-                      <Filter className="w-3 h-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">
-                        No filters
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1 max-h-32 overflow-y-auto border rounded-md p-1 bg-background">
-                      {filterRules.map((rule: FilterRule) => (
-                        <div
-                          key={rule.id}
-                          className="flex items-center gap-1 p-1 rounded-sm hover:bg-accent/50"
-                        >
-                          <Switch
-                            checked={rule.enabled}
-                            onCheckedChange={() => toggleFilterRule(rule.id)}
-                            className="scale-75"
-                          />
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
+                    {filterRules.map((rule: FilterRule) => (
+                      <div
+                        key={rule.id}
+                        className="flex items-center gap-2 p-1.5 rounded-md border bg-background hover:bg-accent/50 transition-colors group"
+                      >
+                        <Switch
+                          checked={rule.enabled}
+                          onCheckedChange={() => toggleFilterRule(rule.id)}
+                          className="scale-75 data-[state=checked]:bg-primary"
+                        />
+                        <div className="flex-1 min-w-0">
                           <Input
                             value={rule.mask}
                             onChange={(e) =>
@@ -429,42 +469,23 @@ export function CANMessageLog() {
                                 e.target.value.toUpperCase()
                               )
                             }
-                            className="font-mono text-xs h-6 flex-1"
+                            className="font-mono text-xs h-6 px-1 border-transparent bg-transparent hover:bg-muted focus:bg-background focus:border-input transition-colors w-full"
                             disabled={!rule.enabled}
                           />
-                          <Button
-                            onClick={() => removeFilterRule(rule.id)}
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 hover:bg-destructive/20"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-2 rounded-md bg-muted/30 border">
-                  <div className="flex items-center gap-1 text-xs">
-                    {getFilterModeIcon(filterMode)}
-                    {filterMode === "whitelist" ? (
-                      <span className="text-green-700 dark:text-green-300">
-                        Whitelist: Show only listed IDs
-                      </span>
-                    ) : filterMode === "blacklist" ? (
-                      <span className="text-red-700 dark:text-red-300">
-                        Blacklist: Hide listed IDs
-                      </span>
-                    ) : (
-                      <span className="text-orange-700 dark:text-orange-300">
-                        Block: Don't store listed IDs (saves memory)
-                      </span>
-                    )}
+                        <Button
+                          onClick={() => removeFilterRule(rule.id)}
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 hover:text-destructive"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -506,7 +527,7 @@ export function CANMessageLog() {
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground bg-background p-3 rounded-md border">
               <span>Current limit: {maxMessages} messages</span>
-              <span>Total received: {messages.length} messages</span>
+              <span>Total {activeTab}: {(activeTab === "received" ? messages : sentMessages).length} messages</span>
             </div>
           </div>
         )}
@@ -516,9 +537,11 @@ export function CANMessageLog() {
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/10 rounded-md border-2 border-dashed border-muted/30">
             <FileText className="w-12 h-12 mb-3 text-muted-foreground/50" />
             <div className="text-center">
-              <p className="font-medium">No messages received yet</p>
+              <p className="font-medium">No {activeTab} messages yet</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Connect to a serial port to start monitoring CAN traffic
+                {activeTab === "received"
+                  ? "Connect to a serial port to start monitoring CAN traffic"
+                  : "Send messages using the panel on the left"}
               </p>
             </div>
           </div>
