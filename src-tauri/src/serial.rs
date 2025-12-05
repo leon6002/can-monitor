@@ -403,10 +403,14 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
     loop {
         println!("🔄 [PARSE] 处理缓冲区，大小: {}", message_buffer.len());
 
-        // 查找固定协议的起始标志 0xAA 0x55
+        if message_buffer.is_empty() {
+            break;
+        }
+
+        // 查找起始标志 0xAA
         let mut start_pos = None;
-        for i in 0..message_buffer.len().saturating_sub(1) {
-            if message_buffer[i] == 0xAA && message_buffer[i + 1] == 0x55 {
+        for i in 0..message_buffer.len() {
+            if message_buffer[i] == 0xAA {
                 start_pos = Some(i);
                 break;
             }
@@ -419,120 +423,184 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
                 message_buffer.drain(0..start);
             }
 
-            // 检查是否有完整的20字节数据包
-            if message_buffer.len() < FIXED_PACKET_LEN {
-                println!(
-                    "⏳ [PARSE] 等待更多数据（有 {} 字节，需要 {} 字节）",
-                    message_buffer.len(),
-                    FIXED_PACKET_LEN
-                );
+            // 检查是否有足够的字节来判断协议类型 (至少需要2个字节: AA <Type>)
+            if message_buffer.len() < 2 {
+                println!("⏳ [PARSE] 等待更多数据 (只有 AA)");
                 break;
             }
 
-            // 提取完整的20字节数据包
-            let packet: Vec<u8> = message_buffer.drain(0..FIXED_PACKET_LEN).collect();
+            let second_byte = message_buffer[1];
 
-            let raw_hex = packet
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            println!("� [PARSE] 提取20字节数据包: {}", raw_hex);
-
-            // 验证数据包格式
-            if packet[0] != 0xAA || packet[1] != 0x55 {
-                println!(
-                    "❌ [PARSE] 数据包报头错误: {:02X} {:02X} (期望 AA 55)",
-                    packet[0], packet[1]
-                );
-                continue;
-            }
-
-            if packet[2] != 0x01 {
-                println!("❌ [PARSE] 类型字节错误: 0x{:02X} (期望 0x01)", packet[2]);
-                continue;
-            }
-
-            // 验证校验码
-            let checksum: u8 = packet[2..19].iter().map(|&b| b as u32).sum::<u32>() as u8;
-            if packet[19] != checksum {
-                println!(
-                    "❌ [PARSE] 校验码错误: 0x{:02X} (期望 0x{:02X})",
-                    packet[19], checksum
-                );
-                continue;
-            }
-
-            // 解析帧类型
-            let frame_type = packet[3];
-            let is_extended = frame_type == 0x02;
-
-            println!(
-                "🔍 [PARSE] 帧类型: 0x{:02X} ({})",
-                frame_type,
-                if is_extended {
-                    "扩展帧"
-                } else {
-                    "标准帧"
+            if second_byte == 0x55 {
+                // ==================== 固定 20 字节协议 ====================
+                // 格式: AA 55 ...
+                if message_buffer.len() < FIXED_PACKET_LEN {
+                    println!(
+                        "⏳ [PARSE] 固定协议: 等待更多数据（有 {} 字节，需要 {} 字节）",
+                        message_buffer.len(),
+                        FIXED_PACKET_LEN
+                    );
+                    break;
                 }
-            );
 
-            // 解析 CAN ID (小端序，4字节)
-            let can_id = (packet[5] as u32)
-                | ((packet[6] as u32) << 8)
-                | ((packet[7] as u32) << 16)
-                | ((packet[8] as u32) << 24);
+                // 提取完整的20字节数据包
+                let packet: Vec<u8> = message_buffer.drain(0..FIXED_PACKET_LEN).collect();
+                let raw_hex = packet
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
 
-            println!("🔍 [PARSE] CAN ID: 0x{:X}", can_id);
+                println!("📦 [PARSE] 提取固定协议数据包: {}", raw_hex);
 
-            // 解析数据长度
-            let data_len = packet[9] as usize;
-            if data_len > 8 {
-                println!("❌ [PARSE] 数据长度错误: {} (最大8)", data_len);
-                continue;
+                // 验证校验码
+                let checksum: u8 = packet[2..19].iter().map(|&b| b as u32).sum::<u32>() as u8;
+                if packet[19] != checksum {
+                    println!(
+                        "❌ [PARSE] 校验码错误: 0x{:02X} (期望 0x{:02X})",
+                        packet[19], checksum
+                    );
+                    continue;
+                }
+
+                // 解析内容
+                let frame_type = packet[3];
+                let is_extended = frame_type == 0x02;
+                
+                // 解析 CAN ID (小端序，4字节)
+                let can_id = (packet[5] as u32)
+                    | ((packet[6] as u32) << 8)
+                    | ((packet[7] as u32) << 16)
+                    | ((packet[8] as u32) << 24);
+
+                let data_len = packet[9] as usize;
+                if data_len > 8 {
+                    println!("❌ [PARSE] 数据长度错误: {}", data_len);
+                    continue;
+                }
+
+                let can_data = packet[10..10 + data_len]
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join("");
+
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+
+                let message = CANMessage {
+                    id: format!("0x{:X}", can_id),
+                    data: can_data,
+                    timestamp,
+                    is_extended,
+                    raw_bytes: raw_hex,
+                };
+
+                println!("✅ [PARSE] 固定协议解析成功: ID={}", message.id);
+                let _ = app_handle.emit("can-message", message);
+
+            } else {
+                // ==================== 可变长度协议 ====================
+                // 格式: AA <Info> <ID> <Data> 55
+                // Info Byte:
+                // Bit 5: 0=Standard, 1=Extended
+                // Bit 4: 0=Data, 1=Remote
+                // Bit 0-3: Data Length (0-8)
+                
+                let info_byte = second_byte;
+                let is_extended = (info_byte & 0x20) != 0; // Bit 5
+                let is_remote = (info_byte & 0x10) != 0;   // Bit 4
+                let data_len = (info_byte & 0x0F) as usize; // Bit 0-3
+
+                let id_len = if is_extended { 4 } else { 2 };
+                // 总长度 = Header(1) + Info(1) + ID(2/4) + Data(len) + End(1)
+                let total_len = 1 + 1 + id_len + data_len + 1;
+
+                if message_buffer.len() < total_len {
+                    println!(
+                        "⏳ [PARSE] 可变协议: 等待更多数据（有 {} 字节，需要 {} 字节）",
+                        message_buffer.len(),
+                        total_len
+                    );
+                    break;
+                }
+
+                // 验证结束符
+                if message_buffer[total_len - 1] != 0x55 {
+                    println!(
+                        "❌ [PARSE] 可变协议结束符错误: {:02X} (期望 55), 可能是误判或数据错位",
+                        message_buffer[total_len - 1]
+                    );
+                    // 如果不是 55，说明这可能不是一个有效包，或者我们误判了协议。
+                    // 策略：丢弃当前的 AA，继续寻找下一个 AA。
+                    message_buffer.remove(0);
+                    continue;
+                }
+
+                // 提取数据包
+                let packet: Vec<u8> = message_buffer.drain(0..total_len).collect();
+                let raw_hex = packet
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+
+                println!("📦 [PARSE] 提取可变协议数据包: {}", raw_hex);
+
+                // 解析 ID
+                let can_id: u32 = if is_extended {
+                    // 4字节 ID (小端序)
+                    // Packet: AA Info [ID0 ID1 ID2 ID3] Data... 55
+                    (packet[2] as u32)
+                        | ((packet[3] as u32) << 8)
+                        | ((packet[4] as u32) << 16)
+                        | ((packet[5] as u32) << 24)
+                } else {
+                    // 2字节 ID (小端序)
+                    // Packet: AA Info [ID0 ID1] Data... 55
+                    (packet[2] as u32) | ((packet[3] as u32) << 8)
+                };
+
+                // 解析 Data
+                let data_start = 2 + id_len;
+                let can_data = packet[data_start..data_start + data_len]
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join("");
+
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+
+                let message = CANMessage {
+                    id: format!("0x{:X}", can_id),
+                    data: can_data,
+                    timestamp,
+                    is_extended,
+                    raw_bytes: raw_hex,
+                };
+
+                println!(
+                    "✅ [PARSE] 可变协议解析成功: ID={}, Type={}, Len={}", 
+                    message.id, 
+                    if is_extended { "Ext" } else { "Std" }, 
+                    data_len
+                );
+                let _ = app_handle.emit("can-message", message);
             }
 
-            println!("🔍 [PARSE] 数据长度: {}", data_len);
-
-            // 提取 CAN 数据（只取实际长度，不包含填充的0）
-            let can_data = packet[10..10 + data_len]
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join("");
-
-            println!("🔍 [PARSE] CAN 数据: {}", can_data);
-
-            // 创建 CAN 消息
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
-
-            let message = CANMessage {
-                id: format!("0x{:X}", can_id),
-                data: can_data,
-                timestamp,
-                is_extended,
-                raw_bytes: raw_hex,
-            };
-
-            println!(
-                "✅ [PARSE] 解析成功: ID={}, Data={}, Extended={}",
-                message.id, message.data, message.is_extended
-            );
-
-            // 发送到前端
-            match app_handle.emit("can-message", message) {
-                Ok(_) => println!("✅ [PARSE] 消息已发送到前端"),
-                Err(e) => eprintln!("❌ [PARSE ERROR] 发送到前端失败: {}", e),
-            }
-
-            // 继续处理缓冲区中的下一条消息
         } else {
             // 没有找到起始标志
-            println!("⏳ [PARSE] 未找到起始标志 AA 55");
+            println!("⏳ [PARSE] 未找到起始标志 AA");
+            // 清空缓冲区，避免无限增长 (或者保留最后几个字节以防断包?)
+            // 安全起见，如果缓冲区很大且没找到 AA，可以清空。
+            // 但如果数据还在传输中，可能 AA 还没到。
+            // 这里我们选择清空，因为如果连 AA 都没有，前面的数据肯定是垃圾。
+            message_buffer.clear();
             break;
         }
     }
