@@ -52,6 +52,7 @@ interface CANStore {
   removeFilterRule: (id: string) => void;
   toggleFilterRule: (id: string) => void;
   updateFilterRule: (id: string, mask: string) => void;
+  toggleAllFilterRules: (enabled: boolean) => void;
 }
 
 export const useCANStore = create<CANStore>((set) => ({
@@ -174,6 +175,11 @@ export const useCANStore = create<CANStore>((set) => ({
       filterRules: state.filterRules.map((rule) =>
         rule.id === id ? { ...rule, mask } : rule
       ),
+    })),
+
+  toggleAllFilterRules: (enabled) =>
+    set((state) => ({
+      filterRules: state.filterRules.map((rule) => ({ ...rule, enabled })),
     })),
 
   // 检查消息是否应该被屏蔽（在 block 模式下使用）

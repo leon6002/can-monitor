@@ -55,6 +55,7 @@ export function CANMessageLog() {
     toggleFilterRule,
     updateFilterRule,
     shouldBlockMessage,
+    toggleAllFilterRules,
   } = useCANStore();
   const [activeTab, setActiveTab] = useState<"received" | "sent">("received");
   const [selectedMessage, setSelectedMessage] = useState<CANMessage | null>(
@@ -465,6 +466,19 @@ export function CANMessageLog() {
                   <Label className="text-xs font-medium text-muted-foreground">
                     Active Filters ({filterRules.filter((r) => r.enabled).length})
                   </Label>
+                  {filterRules.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="master-switch" className="text-xs text-muted-foreground">
+                        All
+                      </Label>
+                      <Switch
+                        id="master-switch"
+                        checked={filterRules.every((r) => r.enabled)}
+                        onCheckedChange={(checked) => toggleAllFilterRules(checked)}
+                        className="scale-75 data-[state=checked]:bg-primary"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {filterRules.length === 0 ? (
