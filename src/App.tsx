@@ -12,6 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "./components/ui/accordion";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { Badge } from "./components/ui/badge";
 import { useCANStore } from "./store/canStore";
 import { useProjectStore, ProjectConfig } from "./store/projectStore";
@@ -64,8 +65,9 @@ function App() {
     }
   }, [isConnected]);
   return (
-    <div className="h-screen bg-background transition-colors flex flex-col">
-      <Toaster position="top-right" richColors />
+    <TooltipProvider>
+      <div className="h-screen bg-background transition-colors flex flex-col">
+        <Toaster position="top-right" richColors />
 
       {/* Header Menu Bar */}
       <header className="flex-none border-b border-border bg-card">
@@ -134,6 +136,7 @@ function App() {
         </div>
       </main>
     </div>
+    </TooltipProvider>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,11 @@ import {
   Pause,
   Play,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function CANMessageLog() {
   const {
@@ -70,11 +75,33 @@ export function CANMessageLog() {
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
 
-  const togglePause = () => {
-    const newState = !isPaused;
-    setIsPaused(newState);
-    isPausedRef.current = newState;
-  };
+  const togglePause = useCallback(() => {
+    setIsPaused((prev) => {
+      const newState = !prev;
+      isPausedRef.current = newState;
+      return newState;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+        e.preventDefault();
+        togglePause();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [togglePause]);
 
   // 使用 requestAnimationFrame 节流批量更新
   const messageBufferRef = useRef<CANMessage[]>([]);
@@ -331,19 +358,26 @@ export function CANMessageLog() {
 
           <div className="flex items-center gap-2">
             {/* Action buttons */}
-            <Button
-              onClick={togglePause}
-              variant={isPaused ? "destructive" : "outline"}
-              size="sm"
-              className={isPaused ? "animate-pulse" : ""}
-            >
-              {isPaused ? (
-                <Play className="w-4 h-4 mr-2" />
-              ) : (
-                <Pause className="w-4 h-4 mr-2" />
-              )}
-              {isPaused ? "Resume" : "Pause"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={togglePause}
+                  variant={isPaused ? "destructive" : "outline"}
+                  size="sm"
+                  className={isPaused ? "animate-pulse" : ""}
+                >
+                  {isPaused ? (
+                    <Play className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Pause className="w-4 h-4 mr-2" />
+                  )}
+                  {isPaused ? "Resume" : "Pause"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Pause/Resume (Space)</p>
+              </TooltipContent>
+            </Tooltip>
             <Button
               onClick={() => {
                 setShowFilter(!showFilter);
