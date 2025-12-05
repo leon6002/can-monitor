@@ -107,6 +107,11 @@ impl SerialManager {
                         match serial_port.read(&mut buffer) {
                             Ok(n) if n > 0 => {
                                 let received_data = &buffer[..n];
+                                let timestamp = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_millis() as u64;
+
                                 println!(
                                     "📥 [SERIAL THREAD] 接收 {} 字节: {:02X?}",
                                     n, received_data
@@ -120,7 +125,7 @@ impl SerialManager {
                                 );
 
                                 // 处理缓冲区中的消息
-                                process_message_buffer(&mut message_buffer, &app);
+                                process_message_buffer(&mut message_buffer, &app, timestamp);
                             }
                             Ok(_) => {
                                 // 读取0字节，短暂休眠
@@ -397,7 +402,7 @@ impl SerialManager {
 /// - 字节10-17: CAN 数据 (8字节，不足补0)
 /// - 字节18: 0x00 (保留)
 /// - 字节19: 校验码 (字节2-18的累加和低8位)
-fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) {
+fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle, timestamp: u64) {
     const FIXED_PACKET_LEN: usize = 20;
 
     loop {
@@ -485,11 +490,6 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
                     .collect::<Vec<_>>()
                     .join("");
 
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
-
                 let message = CANMessage {
                     id: format!("0x{:X}", can_id),
                     data: can_data,
@@ -570,11 +570,6 @@ fn process_message_buffer(message_buffer: &mut Vec<u8>, app_handle: &AppHandle) 
                     .map(|b| format!("{:02X}", b))
                     .collect::<Vec<_>>()
                     .join("");
-
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
 
                 let message = CANMessage {
                     id: format!("0x{:X}", can_id),

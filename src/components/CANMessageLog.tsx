@@ -34,6 +34,8 @@ import {
   Shield,
   List,
   Ban,
+  Pause,
+  Play,
 } from "lucide-react";
 
 export function CANMessageLog() {
@@ -64,6 +66,14 @@ export function CANMessageLog() {
     maxMessages.toString()
   );
   const [newFilterId, setNewFilterId] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+
+  const togglePause = () => {
+    const newState = !isPaused;
+    setIsPaused(newState);
+    isPausedRef.current = newState;
+  };
 
   // 使用 requestAnimationFrame 节流批量更新
   const messageBufferRef = useRef<CANMessage[]>([]);
@@ -90,6 +100,9 @@ export function CANMessageLog() {
     };
 
     const unlisten = listen<CANMessage>("can-message", (event) => {
+      // 如果暂停，不添加到缓冲区
+      if (isPausedRef.current) return;
+
       // 添加到缓冲区
       messageBufferRef.current.push(event.payload);
 
@@ -317,6 +330,19 @@ export function CANMessageLog() {
 
           <div className="flex items-center gap-2">
             {/* Action buttons */}
+            <Button
+              onClick={togglePause}
+              variant={isPaused ? "destructive" : "outline"}
+              size="sm"
+              className={isPaused ? "animate-pulse" : ""}
+            >
+              {isPaused ? (
+                <Play className="w-4 h-4 mr-2" />
+              ) : (
+                <Pause className="w-4 h-4 mr-2" />
+              )}
+              {isPaused ? "Resume" : "Pause"}
+            </Button>
             <Button
               onClick={() => {
                 setShowFilter(!showFilter);

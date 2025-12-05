@@ -62,7 +62,7 @@ export const useCANStore = create<CANStore>((set) => ({
   connectionError: null,
   messages: [],
   sentMessages: [],
-  maxMessages: 50, // 默认最多200条，减少渲染压力
+  maxMessages: 80, // 默认只滚动显示80条，减少渲染压力
   filterMode: "none",
   filterRules: [],
 
