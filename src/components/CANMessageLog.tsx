@@ -380,6 +380,9 @@ export function CANMessageLog() {
             </Tooltip>
             <Button
               onClick={() => {
+                if (!showFilter && filterMode === "none") {
+                  setFilterMode("block");
+                }
                 setShowFilter(!showFilter);
                 setShowSettings(false);
               }}
