@@ -110,9 +110,9 @@ export function SerialPortSelector() {
     try {
       const ports = await invoke<SerialPort[]>("list_serial_ports");
       setAvailablePorts(ports);
-      toast.success(
-        `Found ${ports.length} serial port${ports.length !== 1 ? "s" : ""}`
-      );
+      // toast.success(
+      //   `Found ${ports.length} serial port${ports.length !== 1 ? "s" : ""}`
+      // );
     } catch (error) {
       const errorMsg = `Failed to list ports: ${error}`;
       setConnectionError(errorMsg);
