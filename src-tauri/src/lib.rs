@@ -50,15 +50,16 @@ async fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
 async fn connect_serial_port(
     port_name: String,
     baud_rate: u32,
+    can_baud_rate: u32,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
     println!(
-        "[COMMAND] connect_serial_port 被调用: port={}, baud={}",
-        port_name, baud_rate
+        "[COMMAND] connect_serial_port 被调用: port={}, baud={}, can_baud={}",
+        port_name, baud_rate, can_baud_rate
     );
     let mut manager = state.serial_manager.lock().unwrap();
-    let result = manager.connect(&port_name, baud_rate, app);
+    let result = manager.connect(&port_name, baud_rate, can_baud_rate, app);
     match &result {
         Ok(_) => println!("[COMMAND] ✓ connect_serial_port 成功"),
         Err(e) => eprintln!("[COMMAND ERROR] ✗ connect_serial_port 失败: {}", e),

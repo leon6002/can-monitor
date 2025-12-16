@@ -48,9 +48,13 @@ impl SerialManager {
         &mut self,
         port_name: &str,
         baud_rate: u32,
+        can_baud_rate: u32,
         app: AppHandle,
     ) -> Result<(), String> {
-        println!("[SERIAL] 开始连接串口: {} @ {} baud", port_name, baud_rate);
+        println!(
+            "[SERIAL] 开始连接串口: {} @ {} baud (CAN: {} bps)",
+            port_name, baud_rate, can_baud_rate
+        );
 
         // Disconnect if already connected
         if self.is_connected {

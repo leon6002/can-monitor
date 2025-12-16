@@ -19,7 +19,8 @@ export interface ProjectConfig {
 
   // Serial Port Settings
   selectedPort: string | null;
-  baudRate: string;
+  baudRate: string;   // Serial Baud Rate (Fixed at 2000000 mostly)
+  canBaudRate: string; // CAN Baud Rate (e.g. 500000)
 
   // CAN Message Templates
   messageTemplates: CANMessageTemplate[];
@@ -75,6 +76,7 @@ export const useProjectStore = create<ProjectStore>()(
           updatedAt: Date.now(),
           selectedPort: null,
           baudRate: "2000000",
+          canBaudRate: "500000",
           messageTemplates: [
             {
               id: crypto.randomUUID(),

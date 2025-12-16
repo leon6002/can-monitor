@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCANStore } from "@/store/canStore";
 import { useProjectStore } from "@/store/projectStore";
-import { RefreshCw, Plug, Unplug } from "lucide-react";
+import { RefreshCw, Plug, Unplug, ChevronDown } from "lucide-react";
 
 interface SerialPort {
   name: string;
@@ -33,17 +35,36 @@ export function SerialPortSelector() {
 
   const { currentProject, updateProject } = useProjectStore();
 
-  const [baudRate, setBaudRate] = useState(() => {
-    return currentProject?.baudRate || "2000000";
+  const [canBaudRate, setCanBaudRate] = useState(() => {
+    return currentProject?.canBaudRate 
+      ? (parseInt(currentProject.canBaudRate) / 1000).toString() 
+      : "500";
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isBaudRateOpen, setIsBaudRateOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const baudRateInputRef = useRef<HTMLDivElement>(null);
+
+  const toggleDropdown = () => {
+    if (isConnected) return;
+    
+    if (!isBaudRateOpen && baudRateInputRef.current) {
+      const rect = baudRateInputRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+    setIsBaudRateOpen(!isBaudRateOpen);
+  };
 
   // 从项目加载串口设置
   useEffect(() => {
     if (currentProject) {
-      if (currentProject.baudRate) {
-        setBaudRate(currentProject.baudRate);
+      if (currentProject.canBaudRate) {
+        setCanBaudRate((parseInt(currentProject.canBaudRate) / 1000).toString());
       }
       if (currentProject.selectedPort) {
         setSelectedPort(currentProject.selectedPort);
@@ -60,14 +81,14 @@ export function SerialPortSelector() {
         const updatedProject = {
           ...currentProject,
           selectedPort,
-          baudRate,
+          canBaudRate: (parseInt(canBaudRate) * 1000).toString(),
           updatedAt: Date.now(),
         };
 
         // 先更新 store
         updateProject({
           selectedPort,
-          baudRate,
+          canBaudRate: (parseInt(canBaudRate) * 1000).toString(),
         });
 
         // 再保存到文件
@@ -88,20 +109,15 @@ export function SerialPortSelector() {
 
       return () => clearTimeout(saveTimer);
     }
-  }, [selectedPort, baudRate, currentProject?.id, currentProject?.projectPath]);
+  }, [selectedPort, canBaudRate, currentProject?.id, currentProject?.projectPath]);
 
-  // 常用波特率选项
-  const commonBaudRates = [
-    "9600",
-    "19200",
-    "38400",
-    "57600",
-    "115200",
-    "230400",
-    "460800",
-    "921600",
-    "1000000",
-    "2000000",
+  // 常用CAN波特率选项
+  const commonCanBaudRates = [
+    "125",
+    "250",
+    "500",
+    "800",
+    "1000",
   ];
 
   const refreshPorts = async () => {
@@ -135,10 +151,11 @@ export function SerialPortSelector() {
     try {
       await invoke("connect_serial_port", {
         portName: selectedPort,
-        baudRate: parseInt(baudRate),
+        baudRate: 2000000,
+        canBaudRate: parseInt(canBaudRate) * 1000,
       });
       setIsConnected(true);
-      toast.success(`Connected to ${selectedPort} at ${baudRate} baud`);
+      toast.success(`Connected to ${selectedPort} (CAN: ${canBaudRate} Kbps)`);
     } catch (error) {
       const errorMsg = `Failed to connect: ${error}`;
       setConnectionError(errorMsg);
@@ -192,24 +209,62 @@ export function SerialPortSelector() {
         </div>
         <div className="space-y-1">
           <Label htmlFor="baud-rate" className="text-xs font-medium">
-            Baud Rate
+            CAN Baud Rate (Kbps)
           </Label>
-          <Select
-            value={baudRate}
-            onValueChange={setBaudRate}
-            disabled={isConnected}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select baud rate..." />
-            </SelectTrigger>
-            <SelectContent>
-              {commonBaudRates.map((rate) => (
-                <SelectItem key={rate} value={rate}>
-                  {rate}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="relative" ref={baudRateInputRef}>
+            <Input
+              id="baud-rate"
+              type="text"
+              value={canBaudRate}
+              onChange={(e) => setCanBaudRate(e.target.value)}
+              disabled={isConnected}
+              placeholder="500"
+              className="h-9 pr-8"
+              onClick={toggleDropdown}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-0 top-0 h-9 w-9 px-0 py-0 hover:bg-transparent"
+              disabled={isConnected}
+              onClick={toggleDropdown}
+            >
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+            
+            {isBaudRateOpen && !isConnected && createPortal(
+              <>
+                <div 
+                  className="fixed inset-0 z-50 bg-transparent" 
+                  onClick={() => setIsBaudRateOpen(false)} 
+                />
+                <div 
+                  className="absolute z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+                  style={{
+                    top: dropdownPosition.top + 4, // Add a little gap
+                    left: dropdownPosition.left,
+                    width: dropdownPosition.width,
+                  }}
+                >
+                  <div className="p-1">
+                    {commonCanBaudRates.map((rate) => (
+                      <div
+                        key={rate}
+                        className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-2 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                        onClick={() => {
+                          setCanBaudRate(rate);
+                          setIsBaudRateOpen(false);
+                        }}
+                      >
+                        {rate}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>,
+              document.body
+            )}
+          </div>
         </div>
       </div>
 
@@ -263,7 +318,7 @@ export function SerialPortSelector() {
                 : selectedPort}
             </p>
             <p className="text-xs text-green-600 dark:text-green-400">
-              {baudRate} baud
+              CAN: {canBaudRate} Kbps
             </p>
           </div>
         </div>
